@@ -1,0 +1,12 @@
+.env
+.openclaude
+.claude
+.qwen
+.agents
+/bin
+/scratch
+/tmp
+golang-base
+/storage/app/public
+/.omo
+/logs

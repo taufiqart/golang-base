@@ -1,0 +1,20 @@
+# <type>[optional scope]: <description>
+# 
+# [optional body]
+# 
+# ---
+# Allowed Types:
+#   feat     : A new feature (e.g., feat(auth): add login endpoint)
+#   fix      : A bug fix (e.g., fix(user): resolve foreign key violation)
+#   refactor : A code change that neither fixes a bug nor adds a feature
+#   chore    : Routine tasks, maintenance, dependency updates
+#   docs     : Documentation changes
+#   test     : Adding missing tests or correcting existing tests
+#   style    : Changes that do not affect the meaning of the code
+#   perf     : A code change that improves performance
+# 
+# Rules:
+# 1. Lowercase Type (e.g., feat)
+# 2. Imperative Mood (e.g., "add feature", not "added feature")
+# 3. No Period at the end of the subject line
+# 4. Use the body to explain what and why (vs. how)
