@@ -6,6 +6,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// Role constants
+const (
+	// RoleSuperAdmin has system-wide bypass privileges in middleware and auth service
+	RoleSuperAdmin = "super_admin"
+)
+
 // Role represents a role entity (for seeding)
 type Role struct {
 	bun.BaseModel `bun:"table:roles,alias:r"`

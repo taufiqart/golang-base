@@ -10,6 +10,9 @@ import (
 	_ "golang-base/cmd/seed/seeders"
 	"golang-base/config"
 	"golang-base/internal/database"
+	_ "golang-base/internal/modules/auth"
+	_ "golang-base/internal/modules/storage"
+	_ "golang-base/internal/modules/user"
 )
 
 func main() {
@@ -38,35 +41,24 @@ func main() {
 
 	if len(remainingArgs) > 0 {
 		switch strings.TrimSpace(remainingArgs[0]) {
-		case "--list", "-l":
-			names := seeders.Names()
-			sort.Strings(names)
+		case "list":
 			fmt.Println("Available seeders:")
-			for _, n := range names {
-				fmt.Printf("  - %s\n", n)
+			allSeeders := seeders.GetAll()
+			sort.Slice(allSeeders, func(i, j int) bool {
+				return allSeeders[i].Order() < allSeeders[j].Order()
+			})
+			for _, s := range allSeeders {
+				fmt.Printf("  [%d] %s\n", s.Order(), s.Name())
 			}
 			return
 		}
-
-		name := strings.TrimSpace(remainingArgs[0])
-		if name == "" {
-			fmt.Fprintln(os.Stderr, "Usage: go run cmd/seed/main.go [SeederName] [args...]")
-			fmt.Fprintln(os.Stderr, "  Example: go run cmd/seed/main.go CreateAdminSeeder admin@example.com password123")
-			os.Exit(1)
-		}
-		var extraArgs []string
-		if len(remainingArgs) > 1 {
-			extraArgs = remainingArgs[1:]
-		}
-		if err := seeders.RunByName(database.DB, name, extraArgs...); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
 	}
 
+	// Run all registered seeders
 	if err := seeders.RunAll(database.DB); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Seeder error: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Println("Seeding completed successfully.")
 }

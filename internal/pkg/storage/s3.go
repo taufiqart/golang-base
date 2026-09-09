@@ -115,3 +115,13 @@ func (p *S3Provider) PresignedURL(ctx context.Context, objectKey string, expiry 
 	}
 	return req.URL, nil
 }
+
+func (p *S3Provider) Ping(ctx context.Context) error {
+	_, err := p.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(p.bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 ping head bucket: %w", err)
+	}
+	return nil
+}

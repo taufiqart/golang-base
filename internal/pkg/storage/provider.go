@@ -19,4 +19,5 @@ type Provider interface {
 	Download(ctx context.Context, objectKey string) (io.ReadCloser, error)
 	Delete(ctx context.Context, objectKey string) error
 	PresignedURL(ctx context.Context, objectKey string, expiry time.Duration) (string, error)
+	Ping(ctx context.Context) error
 }

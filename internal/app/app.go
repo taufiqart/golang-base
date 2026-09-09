@@ -8,8 +8,10 @@ import (
 	"golang-base/internal/middleware"
 	"golang-base/internal/modules/auth"
 	"golang-base/internal/modules/docs"
+	"golang-base/internal/modules/storage"
 	"golang-base/internal/modules/user"
 	"golang-base/internal/pkg/logger"
+	pkgstorage "golang-base/internal/pkg/storage"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -20,21 +22,42 @@ func New(cfg *config.Config) *fiber.App {
 	// Setup structured JSON logger
 	logger.Setup()
 
+	if cfg == nil {
+		cfg = &config.Config{
+			AppService: "golang-base",
+		}
+	}
+
+	serviceName := "golang-base"
+	if cfg.AppService != "" {
+		serviceName = cfg.AppService
+	}
+
+	// Calculate HTTP body limit based on MAX_UPLOAD_SIZE
+	bodyLimit := 10 * 1024 * 1024 // 10MB default
+	if cfg.MaxUploadSize > 0 {
+		bodyLimit = int(cfg.MaxUploadSize)
+	}
+
 	// Setup Fiber app with custom error handler
 	app := fiber.New(fiber.Config{
-		AppName:        "golang-base",
+		AppName:        serviceName,
 		ErrorHandler:   customErrorHandler,
 		ReadBufferSize: 32 * 1024,
+		BodyLimit:      bodyLimit,
 	})
 
 	// Setup global middleware
 	middleware.SetupMiddleware(app, cfg)
 
+	// Initialize storage provider for health check
+	storageProvider, _ := pkgstorage.NewProviderFromAppConfig(cfg)
+
 	// Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
 		status := fiber.Map{
 			"status":  "healthy",
-			"service": "golang-base",
+			"service": serviceName,
 		}
 
 		if database.DB != nil {
@@ -57,6 +80,16 @@ func New(cfg *config.Config) *fiber.App {
 			status["redis"] = "disabled"
 		}
 
+		if storageProvider != nil {
+			if err := storageProvider.Ping(c.Context()); err != nil {
+				status["storage"] = "disconnected"
+			} else {
+				status["storage"] = "connected"
+			}
+		} else {
+			status["storage"] = "disabled"
+		}
+
 		return c.JSON(status)
 	})
 
@@ -65,6 +98,7 @@ func New(cfg *config.Config) *fiber.App {
 	docs.New().Register(apiGroup)
 	auth.New().Register(apiGroup)
 	user.New().Register(apiGroup)
+	storage.New(cfg).Register(apiGroup)
 
 	return app
 }
@@ -97,6 +131,8 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 			message = "Request timeout"
 		case fiber.StatusConflict:
 			message = "Conflict"
+		case fiber.StatusRequestEntityTooLarge:
+			message = "Request entity too large"
 		}
 	}
 

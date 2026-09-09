@@ -9,4 +9,6 @@
 golang-base
 /storage/app/public
 /.omo
-/logs
+logs/
+**/logs/
+**/storage/app/public

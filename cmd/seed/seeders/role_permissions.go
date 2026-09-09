@@ -19,10 +19,11 @@ func (s *RolePermissionsSeed) Order() int { return 1 }
 func (s *RolePermissionsSeed) Run(db *bun.DB) error {
 	ctx := context.Background()
 
+	matrix := getPermissionMatrix()
 	allPermissions := domain.AllPermissions()
 
 	fmt.Printf("  Found %d permissions in code\n", len(allPermissions))
-	fmt.Printf("  Found %d roles in code\n", len(PermissionMatrix))
+	fmt.Printf("  Found %d roles in code\n", len(matrix))
 
 	// Count existing rows
 	var count int
@@ -41,7 +42,7 @@ func (s *RolePermissionsSeed) Run(db *bun.DB) error {
 	// Insert permissions for each role from code
 	totalInserted := 0
 	authRepo := auth.NewRepository(db)
-	for role, permissions := range PermissionMatrix {
+	for role, permissions := range matrix {
 		// Create role first to avoid foreign key constraints
 		_ = authRepo.CreateRole(ctx, &domain.Role{
 			Role:        role,
@@ -63,15 +64,32 @@ func (s *RolePermissionsSeed) Run(db *bun.DB) error {
 	return nil
 }
 
-// PermissionMatrix defines default permissions per role
+func getPermissionMatrix() map[string][]string {
+	return map[string][]string{
+		domain.RoleSuperAdmin: domain.AllPermissions(),
+		"admin": {
+			"user.create", "user.edit", "user.view",
+			"role.view",
+			"storage.upload", "storage.view",
+		},
+		"user": {
+			"user.view",
+			"storage.view",
+		},
+	}
+}
+
+// PermissionMatrix defines default permissions per role for backwards compatibility
 var PermissionMatrix = map[string][]string{
 	domain.RoleSuperAdmin: domain.AllPermissions(),
-	domain.RoleAdmin: {
+	"admin": {
 		"user.create", "user.edit", "user.view",
 		"role.view",
+		"storage.upload", "storage.view",
 	},
-	domain.RoleUser: {
+	"user": {
 		"user.view",
+		"storage.view",
 	},
 }
 

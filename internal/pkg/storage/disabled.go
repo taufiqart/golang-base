@@ -29,3 +29,7 @@ func (p *DisabledProvider) Delete(_ context.Context, _ string) error {
 func (p *DisabledProvider) PresignedURL(_ context.Context, _ string, _ time.Duration) (string, error) {
 	return "", ErrStorageDisabled
 }
+
+func (p *DisabledProvider) Ping(_ context.Context) error {
+	return ErrStorageDisabled
+}

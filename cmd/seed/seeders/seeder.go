@@ -109,3 +109,12 @@ func Names() []string {
 	}
 	return keys
 }
+
+// GetAll returns all registered seeders.
+func GetAll() []Seeder {
+	var list []Seeder
+	for _, s := range registry {
+		list = append(list, s)
+	}
+	return list
+}

@@ -80,3 +80,11 @@ func (p *GCSProvider) PresignedURL(ctx context.Context, _ string, expiry time.Du
 	// For production, Pre-signed URL should be generated per-request in the handler.
 	return "", fmt.Errorf("gcs presigned url not implemented: use Download endpoint instead")
 }
+
+func (p *GCSProvider) Ping(ctx context.Context) error {
+	_, err := p.client.Bucket(p.bucket).Attrs(ctx)
+	if err != nil {
+		return fmt.Errorf("gcs ping: %w", err)
+	}
+	return nil
+}

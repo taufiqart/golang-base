@@ -6,13 +6,6 @@ import (
 	"sync"
 )
 
-// Role constants
-const (
-	RoleSuperAdmin = "super_admin"
-	RoleAdmin      = "admin"
-	RoleUser       = "user"
-)
-
 // PermissionDefinition represents a permission with metadata
 type PermissionDefinition struct {
 	Key         string `json:"key"`
@@ -32,13 +25,20 @@ var (
 )
 
 func init() {
-	// Register core permissions to maintain backward compatibility
-	RegisterPermission("user.create", "Buat user baru")
-	RegisterPermission("user.edit", "Edit data user")
-	RegisterPermission("user.view", "Lihat data user")
-	RegisterPermission("user.delete", "Hapus user")
-	RegisterPermission("role.view", "Lihat data role")
-	RegisterPermission("role.edit", "Edit data role")
+	// Core user permissions
+	RegisterPermission("user.create", "Create new user")
+	RegisterPermission("user.edit", "Edit user data")
+	RegisterPermission("user.view", "View user data")
+	RegisterPermission("user.delete", "Delete user")
+
+	// Core role permissions
+	RegisterPermission("role.view", "View role data")
+	RegisterPermission("role.edit", "Edit role data")
+
+	// Core storage permissions
+	RegisterPermission("storage.upload", "Upload files to storage")
+	RegisterPermission("storage.view", "View and generate presigned URLs for storage files")
+	RegisterPermission("storage.delete", "Delete files from storage")
 }
 
 // RegisterPermission adds a permission to the global registry from any module.

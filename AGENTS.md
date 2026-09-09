@@ -24,7 +24,7 @@ golang-base/
 │   ├── domain/                  # Shared domain (entities, interfaces, constants, errors)
 │   │   ├── user.go             # User entity
 │   │   ├── role.go             # Role & permission entities
-│   │   ├── permissions.go      # Permission & role constants
+│   │   ├── permissions.go      # Permission definitions & centralized registry
 │   │   ├── cache.go            # Cache key constants
 │   │   ├── interfaces.go       # Repository & service interfaces
 │   │   └── errors.go           # Domain error definitions
@@ -115,7 +115,7 @@ type UserRepository interface {
 Each module in `internal/modules/<name>/` contains:
 
 | File            | Responsibility                                 |
-| --------------- | ---------------------------------------------- |
+| --------------- | ---------------------------------------------- |\
 | `dto.go`        | Request/Response structs                       |
 | `handler.go`    | HTTP handlers (presentation layer)             |
 | `service.go`    | Business logic (application layer)             |
@@ -143,7 +143,7 @@ func (m *Module) Register(router fiber.Router) {
 }
 ```
 
-Then in `cmd/api/main.go`:
+Then in `internal/app/app.go`:
 
 ```go
 apiGroup := app.Group("/api/v1")
@@ -200,6 +200,15 @@ func (h *Handler) GetProfile(c *fiber.Ctx) error {
 - **ALWAYS run `make fmt`** (or `go fmt ./...`) after writing or modifying any Go code before finishing a task.
 - All Go source files must strictly adhere to standard Go formatting rules. Never leave unformatted code, unused imports, or improper indentation.
 
+### 8. Permission & RBAC Centralization (MANDATORY FOR AI AGENTS)
+
+All permissions in the application MUST be registered centrally in `internal/domain/permissions.go` inside the `init()` function:
+- **Centralized Registry**: NEVER register permissions in individual module files (e.g. `internal/modules/*/module.go`). All permissions MUST live in `internal/domain/permissions.go` to maintain a single source of truth and make RBAC control easily manageable.
+- **English Descriptions**: All permission descriptions MUST be written in English.
+- **Naming Convention**: `<category>.<action>` (e.g. `user.create`, `user.view`, `role.view`, `storage.upload`, `storage.delete`).
+- **Endpoint Protection**: Protect routes in module registration using `middleware.AllowedPermissions("<category>.<action>")`.
+- **Seeder Assignment**: When creating new permissions, always assign default permissions to roles in `cmd/seed/seeders/role_permissions.go`.
+
 ---
 
 ## Adding New Modules & Seeders (MANDATORY FOR AI AGENTS)
@@ -219,7 +228,9 @@ This will automatically generate `dto.go`, `handler.go`, `module.go`, `repositor
 After generation:
 
 - Add domain types to `internal/domain/` (entities, interfaces, constants, errors).
-- Register the module in `cmd/api/main.go`.
+- Register module permissions centrally in `internal/domain/permissions.go` inside `init()` (DO NOT register permissions in module files).
+- Assign permissions to roles in `cmd/seed/seeders/role_permissions.go`.
+- Register the module in `internal/app/app.go`.
 
 ### 2. Scaffolding a Seeder
 
@@ -266,12 +277,14 @@ Environment variables (loaded via `godotenv` from `.env`):
 
 | Variable           | Description                                            | Default          |
 | ------------------ | ------------------------------------------------------ | ---------------- |
+| `APP_SERVICE`      | Application service name (e.g. for health checks)      | `golang-base`    |
 | `PORT`             | Server port                                            | `3100`           |
 | `DATABASE_URL`     | PostgreSQL connection string                           | -                |
 | `E2E_DATABASE_URL` | PostgreSQL connection string for E2E integration tests | -                |
 | `REDIS_ADDR`       | Redis address                                          | `localhost:6379` |
 | `REDIS_PASSWORD`   | Redis password                                         | -                |
 | `JWT_SECRET`       | JWT signing secret                                     | fallback default |
+| `MAX_UPLOAD_SIZE`  | Maximum file upload body size in bytes                 | `10485760` (10MB)|
 
 ---
 
@@ -388,6 +401,7 @@ All integration tests run against a **real PostgreSQL** database via `E2E_DATABA
 - **STRICT MAKEFILE USAGE** — AI agents must ALWAYS use `Makefile` commands for scaffolding (`make make-module`, `make make-seeder`, `make migrate-create`). Never create module or seeder boilerplate files manually.
 - **MANDATORY CODE FORMATTING** — Always run `make fmt` after modifying or creating Go code to ensure standard formatting and styling.
 - **MANDATORY UUIDv7** — Always use UUIDv7 for primary keys. Never use `id serial`, `int64`, or auto-incrementing integers.
+- **CENTRALIZED PERMISSIONS (MANDATORY)** — All permissions MUST be registered in `internal/domain/permissions.go` inside `init()`. Never call `RegisterPermission()` inside individual module files. Descriptions MUST be in English.
 - **SEEDERS MUST USE REPOSITORIES** — Seeders MUST use the Service or Repository layer (e.g., `auth.NewRepository(db)`). Do not use raw SQL queries or raw database manipulations directly inside seeders.
 - **MANDATORY GO TESTING** — You MUST always create Unit Tests (for logic/service) and E2E Integration Tests (for HTTP handlers & DB) whenever you write or modify code.
 - **Backend enums only** — never use database ENUM types; define constants in `internal/domain/` and store as `VARCHAR`
@@ -452,17 +466,18 @@ The `real-api-full-payload-response-report.md` must include:
 - **Verification** -- what is checked to determine pass/fail
 - **HTTP Request(s)** -- every request for the scenario:
 
-  ````
+  ```
   ### Request 1: POST /api/v1/tasks -> 201
 
   **Payload**
   ```json
   { ... }
+  ```
 
   **Response**
   ```json
   { ... }
-  ````
+  ```
 
 #### Summary Table
 

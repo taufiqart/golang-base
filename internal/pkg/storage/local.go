@@ -116,6 +116,13 @@ func (p *LocalProvider) PresignedURL(_ context.Context, objectKey string, _ time
 	return p.publicURL + "/" + objectKey, nil
 }
 
+func (p *LocalProvider) Ping(_ context.Context) error {
+	if _, err := os.Stat(p.basePath); err != nil {
+		return fmt.Errorf("local storage path error: %w", err)
+	}
+	return nil
+}
+
 func (p *LocalProvider) safePath(objectKey string) (string, error) {
 	cleaned := filepath.Clean(objectKey)
 	if filepath.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
