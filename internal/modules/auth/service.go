@@ -103,7 +103,7 @@ func (s *service) Login(ctx context.Context, email, password string) (string, st
 func (s *service) RefreshToken(ctx context.Context, refreshToken string) (string, error) {
 	claims, err := s.jwt.ValidateToken(refreshToken)
 	if err != nil {
-		return "", err
+		return "", ErrInvalidCredentials
 	}
 
 	newAccessToken, err := s.jwt.GenerateAccessToken(claims.UserID)
@@ -116,7 +116,7 @@ func (s *service) RefreshToken(ctx context.Context, refreshToken string) (string
 
 // User Service
 
-func (s *service) CreateUser(ctx context.Context, email, password, name string, roles []string) (*domain.User, error) {
+func (s *service) CreateUser(ctx context.Context, email, password, name string, roles []string, assignedBy ...string) (*domain.User, error) {
 	existing, _ := s.repo.GetUserByEmail(ctx, email)
 	if existing != nil {
 		return nil, ErrUserExists
@@ -143,14 +143,12 @@ func (s *service) CreateUser(ctx context.Context, email, password, name string, 
 		UpdatedAt: time.Now(),
 	}
 
-	if err := s.repo.CreateUser(ctx, user); err != nil {
+	if err := s.repo.CreateUser(ctx, user, assignedBy...); err != nil {
 		return nil, db.MapDBError(err)
 	}
 
 	return user, nil
 }
-
-// User Service
 
 func (s *service) GetUser(ctx context.Context, id string) (*domain.User, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
@@ -160,7 +158,7 @@ func (s *service) GetUser(ctx context.Context, id string) (*domain.User, error) 
 	return user, nil
 }
 
-func (s *service) UpdateUser(ctx context.Context, id string, name *string, roles []string, isActive *bool) (*domain.User, error) {
+func (s *service) UpdateUser(ctx context.Context, id string, name *string, roles []string, isActive *bool, assignedBy ...string) (*domain.User, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
 		return nil, ErrUserNotFound
@@ -177,7 +175,7 @@ func (s *service) UpdateUser(ctx context.Context, id string, name *string, roles
 	}
 	user.UpdatedAt = time.Now()
 
-	if err := s.repo.UpdateUser(ctx, user); err != nil {
+	if err := s.repo.UpdateUser(ctx, user, assignedBy...); err != nil {
 		return nil, db.MapDBError(err)
 	}
 
@@ -201,6 +199,18 @@ func (s *service) ListUsers(ctx context.Context, filter *UserFilter) ([]*domain.
 }
 
 // Role Service
+
+func (s *service) CreateRole(ctx context.Context, role, description string) (*domain.Role, error) {
+	newRole := &domain.Role{
+		Role:        role,
+		Description: description,
+		CreatedAt:   time.Now(),
+	}
+	if err := s.repo.CreateRole(ctx, newRole); err != nil {
+		return nil, db.MapDBError(err)
+	}
+	return newRole, nil
+}
 
 func (s *service) GetRolePermissions(ctx context.Context, role string) ([]string, error) {
 	perms, err := s.repo.GetRolePermissions(ctx, role)
@@ -443,7 +453,7 @@ func (s *service) GrantUserPermission(ctx context.Context, targetType string, ta
 		// Invalidate role permission cache
 		s.invalidateRolePermissionCache(ctx, *targetRole)
 	} else if targetType == "user_permission" && targetUserID != nil {
-		if err := s.repo.GrantUserPermission(ctx, *targetUserID, permission, isGranted, expiresAt); err != nil {
+		if err := s.repo.GrantUserPermission(ctx, *targetUserID, permission, isGranted, expiresAt, &actorID); err != nil {
 			return err
 		}
 		// Invalidate user permission cache

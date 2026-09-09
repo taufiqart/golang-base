@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"golang-base/config"
 	"golang-base/internal/database"
@@ -16,16 +18,36 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func main() {
+func initDB() (*bun.DB, func(), error) {
 	cfg := config.LoadConfig()
 
 	if err := database.InitPostgres(cfg); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer database.Close()
 
-	db := database.DB
+	return database.DB, func() { database.Close() }, nil
+}
 
+func getMigrationsDir() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	dir := filepath.Join(cwd, "migrations")
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return dir, nil
+	}
+
+	parentDir := filepath.Join(cwd, "..", "migrations")
+	if info, err := os.Stat(parentDir); err == nil && info.IsDir() {
+		return filepath.Clean(parentDir), nil
+	}
+
+	return dir, nil
+}
+
+func main() {
 	app := &cli.App{
 		Name:  "migrate",
 		Usage: "Database migration tool for golang-base",
@@ -34,6 +56,11 @@ func main() {
 				Name:  "up",
 				Usage: "Run all pending migrations",
 				Action: func(c *cli.Context) error {
+					db, cleanup, err := initDB()
+					if err != nil {
+						return err
+					}
+					defer cleanup()
 					return runMigrations(db)
 				},
 			},
@@ -41,6 +68,11 @@ func main() {
 				Name:  "down",
 				Usage: "Rollback the last migration",
 				Action: func(c *cli.Context) error {
+					db, cleanup, err := initDB()
+					if err != nil {
+						return err
+					}
+					defer cleanup()
 					return rollbackMigration(db)
 				},
 			},
@@ -49,13 +81,22 @@ func main() {
 				Usage: "Create a new migration file",
 				Args:  true,
 				Action: func(c *cli.Context) error {
-					return createMigrationFile(c.Args().First())
+					name := c.Args().First()
+					if strings.TrimSpace(name) == "" {
+						return fmt.Errorf("migration name is required. Usage: migrate create <name>")
+					}
+					return createMigrationFile(name)
 				},
 			},
 			{
 				Name:  "list",
 				Usage: "List all migrations and their status",
 				Action: func(c *cli.Context) error {
+					db, cleanup, err := initDB()
+					if err != nil {
+						return err
+					}
+					defer cleanup()
 					return listMigrations(db)
 				},
 			},
@@ -63,6 +104,11 @@ func main() {
 				Name:  "fresh",
 				Usage: "Drop all tables and re-run all migrations",
 				Action: func(c *cli.Context) error {
+					db, cleanup, err := initDB()
+					if err != nil {
+						return err
+					}
+					defer cleanup()
 					return freshMigration(db)
 				},
 			},
@@ -85,13 +131,10 @@ func ensureMigrationsTable(ctx context.Context, db *bun.DB) {
 }
 
 func runMigrations(db *bun.DB) error {
-	// Get current working directory
-	cwd, err := os.Getwd()
+	migrationsDir, err := getMigrationsDir()
 	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
+		return err
 	}
-
-	migrationsDir := filepath.Join(cwd, "migrations")
 
 	// Use ReadDir instead of filepath.Glob
 	entries, err := os.ReadDir(migrationsDir)
@@ -116,6 +159,14 @@ func runMigrations(db *bun.DB) error {
 
 	ctx := context.Background()
 	ensureMigrationsTable(ctx, db)
+
+	// Get current batch number (max batch in table)
+	var currentBatch int
+	err = db.QueryRowContext(ctx, "SELECT COALESCE(MAX(batch), 0) FROM migrations").Scan(&currentBatch)
+	if err != nil {
+		return fmt.Errorf("failed to get current batch: %w", err)
+	}
+	nextBatch := currentBatch + 1
 
 	for _, file := range files {
 		migrationName := strings.TrimSuffix(filepath.Base(file), ".up.sql")
@@ -147,15 +198,8 @@ func runMigrations(db *bun.DB) error {
 			return fmt.Errorf("failed to execute migration %s: %w", file, err)
 		}
 
-		// Get current batch number (max batch in table)
-		var currentBatch int
-		err = db.QueryRowContext(ctx, "SELECT COALESCE(MAX(batch), 0) FROM migrations").Scan(&currentBatch)
-		if err != nil {
-			return fmt.Errorf("failed to get current batch: %w", err)
-		}
-
 		// Track migration in migrations with batch
-		_, _ = db.ExecContext(ctx, "INSERT INTO migrations (name, batch) VALUES (?, ?)", migrationName, currentBatch+1)
+		_, _ = db.ExecContext(ctx, "INSERT INTO migrations (name, batch) VALUES (?, ?)", migrationName, nextBatch)
 
 		fmt.Printf("Ran migration: %s\n", filepath.Base(file))
 	}
@@ -208,8 +252,10 @@ func rollbackMigration(db *bun.DB) error {
 
 	fmt.Printf("Rolling back batch %d (%d migrations)\n", currentBatch, len(migrations))
 
-	cwd, _ := os.Getwd()
-	migrationsDir := filepath.Join(cwd, "migrations")
+	migrationsDir, err := getMigrationsDir()
+	if err != nil {
+		return err
+	}
 
 	for _, m := range migrations {
 		downFile := filepath.Join(migrationsDir, m.Name+".down.sql")
@@ -239,13 +285,10 @@ func rollbackMigration(db *bun.DB) error {
 func listMigrations(db *bun.DB) error {
 	ctx := context.Background()
 
-	// Get current working directory
-	cwd, err := os.Getwd()
+	migrationsDir, err := getMigrationsDir()
 	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
+		return err
 	}
-
-	migrationsDir := filepath.Join(cwd, "migrations")
 
 	// Read all migration files
 	entries, err := os.ReadDir(migrationsDir)
@@ -325,25 +368,74 @@ func freshMigration(db *bun.DB) error {
 	return runMigrations(db)
 }
 
+func getNextMigrationSequence(migrationsDir string) int {
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return 1
+	}
+
+	maxSeq := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		filename := entry.Name()
+		if strings.HasSuffix(filename, ".up.sql") || strings.HasSuffix(filename, "_up.sql") {
+			parts := strings.SplitN(filename, "_", 2)
+			if len(parts) > 1 {
+				var seq int
+				if _, err := fmt.Sscanf(parts[0], "%d", &seq); err == nil {
+					if seq > maxSeq {
+						maxSeq = seq
+					}
+				}
+			}
+		}
+	}
+	return maxSeq + 1
+}
+
 func createMigrationFile(name string) error {
-	if name == "" {
+	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("migration name is required")
 	}
 
+	migrationsDir, err := getMigrationsDir()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(migrationsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create migrations directory: %w", err)
+	}
+
+	name = strings.TrimSpace(name)
 	name = strings.ReplaceAll(name, " ", "_")
+	name = strings.ReplaceAll(name, "-", "_")
 	name = strings.ToLower(name)
 
-	migrationName := fmt.Sprintf("%s_%s", "0001", name)
-	upFile := filepath.Join("migrations", migrationName+"_up.sql")
-	downFile := filepath.Join("migrations", migrationName+"_down.sql")
+	var migrationName string
+	// Check if user already provided a numbered prefix e.g. "003_something"
+	matched, _ := regexp.MatchString(`^\d{3,}_`, name)
+	if matched {
+		migrationName = name
+	} else {
+		nextSeq := getNextMigrationSequence(migrationsDir)
+		migrationName = fmt.Sprintf("%03d_%s", nextSeq, name)
+	}
 
-	upContent := fmt.Sprintf("-- Migration: %s\n-- Created: 2026-05-20\n\n", name)
+	upFile := filepath.Join(migrationsDir, migrationName+".up.sql")
+	downFile := filepath.Join(migrationsDir, migrationName+".down.sql")
+
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+
+	upContent := fmt.Sprintf("-- Migration: %s\n-- Created: %s\n\n", migrationName, currentTime)
 	if err := os.WriteFile(upFile, []byte(upContent), 0644); err != nil {
 		return fmt.Errorf("failed to create up migration: %w", err)
 	}
 	fmt.Printf("Created: %s\n", upFile)
 
-	downContent := fmt.Sprintf("-- Rollback: %s\n\n", name)
+	downContent := fmt.Sprintf("-- Rollback: %s\n-- Created: %s\n\n", migrationName, currentTime)
 	if err := os.WriteFile(downFile, []byte(downContent), 0644); err != nil {
 		return fmt.Errorf("failed to create down migration: %w", err)
 	}

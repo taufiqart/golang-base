@@ -51,9 +51,10 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 
 	// Roles
 	roles := router.Group("/roles", middleware.AuthMiddleware())
+	roles.Post("/", middleware.AllowedPermissions("role.edit"), h.CreateRole)
 	roles.Get("/", middleware.AllowedPermissions("user.view"), h.GetAllRoles)
 	roles.Get("/:role/permissions", middleware.AllowedPermissions("user.view"), h.GetRolePermissions)
-	roles.Put("/:role/permissions", middleware.AllowedPermissions("user.edit"), h.UpdateRolePermissions)
+	roles.Put("/:role/permissions", middleware.AllowedPermissions("role.edit"), h.UpdateRolePermissions)
 
 	// Permissions (protected)
 	permissions := router.Group("/permissions", middleware.AuthMiddleware())
@@ -106,10 +107,20 @@ func (h *handler) Login(c *fiber.Ctx) error {
 
 	accessToken, refreshToken, user, err := h.svc.Login(c.Context(), req.Email, req.Password)
 	if err != nil {
-		return response.Unauthorized(c, "invalid credentials")
+		if err == ErrInvalidCredentials {
+			return response.Unauthorized(c, "invalid email or password")
+		}
+		log.Printf("error: %v", err)
+		return response.InternalError(c, "internal server error")
 	}
 
-	return response.OK(c, NewAuthResponse(accessToken, refreshToken, ToUserResponsePtr(user)))
+	permissions, err := h.svc.GetComputedPermissions(c.Context(), user.ID, user.Roles)
+	if err != nil {
+		permissions = []string{}
+	}
+
+	userResp := ToUserResponseWithPermissions(user, permissions)
+	return response.OK(c, NewAuthResponse(accessToken, refreshToken, &userResp))
 }
 
 func (h *handler) RefreshToken(c *fiber.Ctx) error {
@@ -118,15 +129,19 @@ func (h *handler) RefreshToken(c *fiber.Ctx) error {
 		return response.BadRequest(c, "invalid request body")
 	}
 
-	newAccessToken, err := h.svc.RefreshToken(c.Context(), req.RefreshToken)
+	if req.RefreshToken == "" {
+		return response.BadRequest(c, "refresh token is required")
+	}
+
+	accessToken, err := h.svc.RefreshToken(c.Context(), req.RefreshToken)
 	if err != nil {
 		return response.Unauthorized(c, "invalid refresh token")
 	}
 
 	return response.OK(c, fiber.Map{
-		"access_token": newAccessToken,
+		"access_token": accessToken,
 		"token_type":   "Bearer",
-		"expires_in":   900, // 15 minutes in seconds
+		"expires_in":   900,
 	})
 }
 
@@ -138,15 +153,12 @@ func (h *handler) Me(c *fiber.Ctx) error {
 		return response.NotFound(c, "user not found")
 	}
 
-	// Get role permissions and user permission overrides
-	permissions, err := h.svc.GetComputedPermissions(c.Context(), userID, user.Roles)
+	permissions, err := h.svc.GetComputedPermissions(c.Context(), user.ID, user.Roles)
 	if err != nil {
-		log.Printf("error: %v", err)
-		return response.InternalError(c, "internal server error")
+		permissions = []string{}
 	}
 
-	userResp := ToUserResponseWithPermissions(user, permissions)
-	return response.OK(c, userResp)
+	return response.OK(c, ToUserResponseWithPermissions(user, permissions))
 }
 
 // User Handlers
@@ -167,16 +179,16 @@ func (h *handler) ListUsers(c *fiber.Ctx) error {
 		return response.InternalError(c, "internal server error")
 	}
 
-	userResponses := make([]UserResponse, len(users))
-	for i, u := range users {
-		permissions, err := h.svc.GetComputedPermissions(c.Context(), u.ID, u.Roles)
+	result := make([]UserResponse, 0, len(users))
+	for _, user := range users {
+		permissions, err := h.svc.GetComputedPermissions(c.Context(), user.ID, user.Roles)
 		if err != nil {
 			permissions = []string{}
 		}
-		userResponses[i] = ToUserResponseWithPermissions(u, permissions)
+		result = append(result, ToUserResponseWithPermissions(user, permissions))
 	}
 
-	return response.PaginatedResponse(c, userResponses, page, limit, total)
+	return response.PaginatedResponse(c, result, page, limit, total)
 }
 
 func (h *handler) GetUser(c *fiber.Ctx) error {
@@ -198,6 +210,7 @@ func (h *handler) GetUser(c *fiber.Ctx) error {
 
 func (h *handler) UpdateUser(c *fiber.Ctx) error {
 	id := c.Params("id")
+	actorID := c.Locals("userID").(string)
 
 	var req UpdateUserRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -217,7 +230,7 @@ func (h *handler) UpdateUser(c *fiber.Ctx) error {
 		isActive = req.IsActive
 	}
 
-	user, err := h.svc.UpdateUser(c.Context(), id, name, roles, isActive)
+	user, err := h.svc.UpdateUser(c.Context(), id, name, roles, isActive, actorID)
 	if err != nil {
 		if err == ErrUserNotFound {
 			return response.NotFound(c, "user not found")
@@ -279,7 +292,7 @@ func (h *handler) CreateUser(c *fiber.Ctx) error {
 		}
 	}
 
-	user, err := h.svc.CreateUser(c.Context(), req.Email, req.Password, req.Name, roles)
+	user, err := h.svc.CreateUser(c.Context(), req.Email, req.Password, req.Name, roles, actorID)
 	if err != nil {
 		if err == ErrUserExists {
 			return response.BadRequest(c, "user already exists")
@@ -297,6 +310,25 @@ func (h *handler) CreateUser(c *fiber.Ctx) error {
 }
 
 // Role Handlers
+
+func (h *handler) CreateRole(c *fiber.Ctx) error {
+	var req RoleRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.BadRequest(c, "invalid request body")
+	}
+
+	if strings.TrimSpace(req.Role) == "" {
+		return response.BadRequest(c, "role name is required")
+	}
+
+	role, err := h.svc.CreateRole(c.Context(), strings.TrimSpace(req.Role), req.Description)
+	if err != nil {
+		log.Printf("error: %v", err)
+		return response.InternalError(c, "internal server error")
+	}
+
+	return response.Created(c, ToRoleResponse(role))
+}
 
 func (h *handler) GetRolePermissions(c *fiber.Ctx) error {
 	role := c.Params("role")
@@ -478,6 +510,7 @@ func (h *handler) RevokeUserPermission(c *fiber.Ctx) error {
 	if reason != "" {
 		reasonPtr = &reason
 	}
+
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
 
@@ -489,52 +522,53 @@ func (h *handler) RevokeUserPermission(c *fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"message": "permission revoked"})
 }
 
-// Audit Handlers
+// Audit Log Handlers
 
 func (h *handler) QueryPermissionChanges(c *fiber.Ctx) error {
-	var filter domain.PermissionQueryFilter
+	var query AuditLogQuery
+	if err := c.QueryParser(&query); err != nil {
+		return response.BadRequest(c, "invalid query parameters")
+	}
 
-	if targetType := c.Query("target_type"); targetType != "" {
-		filter.TargetType = &targetType
-	}
-	if targetRole := c.Query("target_role"); targetRole != "" {
-		filter.TargetRole = &targetRole
-	}
-	if targetUserID := c.Query("target_user_id"); targetUserID != "" {
-		filter.TargetUserID = &targetUserID
-	}
-	if permission := c.Query("permission"); permission != "" {
-		filter.Permission = &permission
-	}
-	if changedBy := c.Query("changed_by"); changedBy != "" {
-		filter.ChangedBy = &changedBy
-	}
-	if action := c.Query("action"); action != "" {
-		filter.Action = &action
-	}
-	if fromDate := c.Query("from_date"); fromDate != "" {
-		if t, err := time.Parse("2006-01-02", fromDate); err == nil {
-			filter.FromDate = &t
-		}
-	}
-	if toDate := c.Query("to_date"); toDate != "" {
-		if t, err := time.Parse("2006-01-02", toDate); err == nil {
-			filter.ToDate = &t
-		}
-	}
 	page, limit, offset := response.ParsePaginationParams(c)
-	filter.Limit = limit
-	filter.Offset = offset
 
-	logs, err := h.svc.QueryPermissionChanges(c.Context(), &filter)
+	var fromDate, toDate *time.Time
+	if query.FromDate != nil {
+		t, err := time.Parse(time.RFC3339, *query.FromDate)
+		if err == nil {
+			fromDate = &t
+		}
+	}
+	if query.ToDate != nil {
+		t, err := time.Parse(time.RFC3339, *query.ToDate)
+		if err == nil {
+			toDate = &t
+		}
+	}
+
+	filter := &domain.PermissionQueryFilter{
+		TargetType:   query.TargetType,
+		TargetRole:   query.TargetRole,
+		TargetUserID: query.TargetUserID,
+		Permission:   query.Permission,
+		ChangedBy:    query.ChangedBy,
+		Action:       query.Action,
+		FromDate:     fromDate,
+		ToDate:       toDate,
+		Limit:        limit,
+		Offset:       offset,
+	}
+
+	logs, err := h.svc.QueryPermissionChanges(c.Context(), filter)
 	if err != nil {
 		log.Printf("error: %v", err)
 		return response.InternalError(c, "internal server error")
 	}
 
-	total, err := h.svc.CountPermissionChanges(c.Context(), &filter)
+	total, err := h.svc.CountPermissionChanges(c.Context(), filter)
 	if err != nil {
-		total = 0
+		log.Printf("error: %v", err)
+		return response.InternalError(c, "internal server error")
 	}
 
 	return response.PaginatedResponse(c, logs, page, limit, total)

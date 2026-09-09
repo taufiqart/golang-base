@@ -12,6 +12,15 @@ CMD_API=./cmd/api
 CMD_MIGRATE=./cmd/migrate
 CMD_SEED=./cmd/seed
 
+# Support positional arguments for migrate-create (e.g. make migrate-create add_users_table)
+ifeq (migrate-create,$(firstword $(MAKECMDGOALS)))
+  MIGRATE_NAME_ARG := $(word 2,$(MAKECMDGOALS))
+  ifneq ($(MIGRATE_NAME_ARG),)
+    name ?= $(MIGRATE_NAME_ARG)
+    $(eval $(MIGRATE_NAME_ARG):;@:)
+  endif
+endif
+
 .PHONY: help build build-api build-migrate build-seed run run-dev tidy clean migrate-up migrate-down migrate-create migrate-list migrate-fresh test seed seed-list seed-all
 
 # Default target
@@ -99,12 +108,14 @@ migrate-down: build-migrate ## Rollback the last migration
 
 ## Create new migration file
 migrate-create: build-migrate ## Create a new migration (usage: make migrate-create name=add_users_table)
-	@if [ -z "$(name)" ]; then \
-		echo "Usage: make migrate-create name=add_users_table"; \
+	@MIG_NAME="$(strip $(or $(name),$(NAME)))"; \
+	if [ -z "$$MIG_NAME" ]; then \
+		echo "Error: Migration name is required."; \
+		echo "Usage: make migrate-create name=add_users_table (or: make migrate-create add_users_table)"; \
 		exit 1; \
-	fi
-	@echo "Creating migration: $(name)"
-	$(MIGRATE_BIN) create $(name)
+	fi; \
+	echo "Creating migration: $$MIG_NAME"; \
+	$(MIGRATE_BIN) create "$$MIG_NAME"
 
 ## List all migrations and their status
 migrate-list: build-migrate ## List all migrations with status
@@ -190,5 +201,5 @@ make-seeder: ## Scaffold a new seeder (usage: make make-seeder name=Product)
 		exit 1; \
 	fi
 	@echo "Scaffolding new seeder: $(name)Seeder..."
-	@echo "package seeders\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"github.com/uptrace/bun\"\n)\n\ntype $(name)Seed struct{}\n\nfunc (s *$(name)Seed) Name() string { return \"$(name)Seeder\" }\n\nfunc (s *$(name)Seed) Order() int { return 10 }\n\nfunc (s *$(name)Seed) SetArgs(args []string) {}\n\nfunc (s *$(name)Seed) Run(db *bun.DB) error {\n\t// ctx := context.Background()\n\tfmt.Println(\"  Running $(name)Seeder...\")\n\treturn nil\n}\n\nfunc init() { Register(&$(name)Seed{}) }\n" > cmd/seed/seeders/$(shell echo $(name) | tr A-Z a-z).go
+	@echo "package seeders\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"github.com/uptrace/bun\"\n)\n\ntype $(name)Seed struct{}\n\nfunc (s *$(name)Seed) Name() string { return \"$(name)Seeder\" }\n\nfunc (s *$(name)Seed) Order() int { return 10 }\n\nfunc (s *$(name)Seed) SetArgs(args []string) {}\n\nfunc (s *$(name)Seed) Run(db *bun.DB) error { \n\t// ctx := context.Background()\n\tfmt.Println(\"  Running $(name)Seeder...\")\n\treturn nil\n}\n\nfunc init() { Register(&$(name)Seed{}) }\n" > cmd/seed/seeders/$(shell echo $(name) | tr A-Z a-z).go
 	@echo "Seeder $(name)Seeder created at cmd/seed/seeders/$(shell echo $(name) | tr A-Z a-z).go"

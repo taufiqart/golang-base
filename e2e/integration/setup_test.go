@@ -14,15 +14,20 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/joho/godotenv"
 )
 
 var (
 	TestApp     *fiber.App
+	TestConfig  *config.Config
 	projectRoot string
 )
 
 func TestMain(m *testing.M) {
 	projectRoot = findProjectRoot()
+
+	// Load .env from project root if available
+	_ = godotenv.Load(filepath.Join(projectRoot, ".env"))
 
 	if e2eDB := os.Getenv("E2E_DATABASE_URL"); e2eDB != "" {
 		os.Setenv("DATABASE_URL", e2eDB)
@@ -37,6 +42,8 @@ func TestMain(m *testing.M) {
 		fmt.Println("E2E_DATABASE_URL not set. Skipping integration tests.")
 		os.Exit(0)
 	}
+
+	TestConfig = cfg
 
 	if err := database.InitPostgres(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to database: %v\n", err)

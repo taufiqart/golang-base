@@ -12,4 +12,5 @@ type Message struct {
 
 type Mailer interface {
 	Send(msg *Message) error
+	Ping() error
 }

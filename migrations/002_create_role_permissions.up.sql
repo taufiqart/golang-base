@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS roles (
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL REFERENCES roles (role) ON DELETE CASCADE,
+    assigned_by UUID REFERENCES users (id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, role)
 );
@@ -19,6 +20,8 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles (user_id);
 
 CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles (role);
+
+CREATE INDEX IF NOT EXISTS idx_user_roles_assigned_by ON user_roles (assigned_by);
 
 CREATE TABLE IF NOT EXISTS role_permissions (
     role VARCHAR(50) NOT NULL REFERENCES roles (role) ON DELETE CASCADE,
@@ -36,6 +39,7 @@ CREATE TABLE IF NOT EXISTS user_permissions (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     permission VARCHAR(100) NOT NULL,
     is_granted BOOLEAN NOT NULL DEFAULT true,
+    assigned_by UUID REFERENCES users (id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP,
     PRIMARY KEY (user_id, permission)
@@ -44,6 +48,8 @@ CREATE TABLE IF NOT EXISTS user_permissions (
 CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions (user_id);
 
 CREATE INDEX IF NOT EXISTS idx_user_permissions_permission ON user_permissions (permission);
+
+CREATE INDEX IF NOT EXISTS idx_user_permissions_assigned_by ON user_permissions (assigned_by);
 
 CREATE TABLE IF NOT EXISTS permission_changes_log (
     id UUID PRIMARY KEY,

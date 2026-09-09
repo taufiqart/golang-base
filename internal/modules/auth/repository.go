@@ -24,7 +24,7 @@ func NewRepository(db *bun.DB) *repository {
 
 // User Repository
 
-func (r *repository) CreateUser(ctx context.Context, user *domain.User) error {
+func (r *repository) CreateUser(ctx context.Context, user *domain.User, assignedBy ...string) error {
 	if user.ID == "" {
 		id, err := uuid.NewV7()
 		if err != nil {
@@ -38,8 +38,16 @@ func (r *repository) CreateUser(ctx context.Context, user *domain.User) error {
 	}
 	if len(user.Roles) > 0 {
 		var userRoles []domain.UserRole
+		var actor *string
+		if len(assignedBy) > 0 && assignedBy[0] != "" {
+			actor = &assignedBy[0]
+		}
 		for _, role := range user.Roles {
-			userRoles = append(userRoles, domain.UserRole{UserID: user.ID, Role: role})
+			userRoles = append(userRoles, domain.UserRole{
+				UserID:     user.ID,
+				Role:       role,
+				AssignedBy: actor,
+			})
 		}
 		_, err = r.db.NewInsert().Model(&userRoles).Exec(ctx)
 	}
@@ -70,7 +78,7 @@ func (r *repository) GetUserByEmail(ctx context.Context, email string) (*domain.
 	return &user, nil
 }
 
-func (r *repository) UpdateUser(ctx context.Context, user *domain.User) error {
+func (r *repository) UpdateUser(ctx context.Context, user *domain.User, assignedBy ...string) error {
 	_, err := r.db.NewUpdate().Model(user).Where("id = ?", user.ID).Exec(ctx)
 	if err != nil {
 		return err
@@ -78,8 +86,16 @@ func (r *repository) UpdateUser(ctx context.Context, user *domain.User) error {
 	r.db.NewDelete().Model((*domain.UserRole)(nil)).Where("user_id = ?", user.ID).Exec(ctx)
 	if len(user.Roles) > 0 {
 		var userRoles []domain.UserRole
+		var actor *string
+		if len(assignedBy) > 0 && assignedBy[0] != "" {
+			actor = &assignedBy[0]
+		}
 		for _, role := range user.Roles {
-			userRoles = append(userRoles, domain.UserRole{UserID: user.ID, Role: role})
+			userRoles = append(userRoles, domain.UserRole{
+				UserID:     user.ID,
+				Role:       role,
+				AssignedBy: actor,
+			})
 		}
 		_, err = r.db.NewInsert().Model(&userRoles).Exec(ctx)
 	}
@@ -176,17 +192,23 @@ func (r *repository) GetRolePermissions(ctx context.Context, role string) ([]*do
 
 // UserPermission Repository
 
-func (r *repository) GrantUserPermission(ctx context.Context, userID string, permission string, isGranted bool, expiresAt *time.Time) error {
+func (r *repository) GrantUserPermission(ctx context.Context, userID string, permission string, isGranted bool, expiresAt *time.Time, assignedBy ...*string) error {
+	var actor *string
+	if len(assignedBy) > 0 {
+		actor = assignedBy[0]
+	}
 	up := &domain.UserPermission{
 		UserID:     userID,
 		Permission: permission,
 		IsGranted:  isGranted,
+		AssignedBy: actor,
 		CreatedAt:  time.Now(),
 		ExpiresAt:  expiresAt,
 	}
 	_, err := r.db.NewInsert().Model(up).
 		On("CONFLICT (user_id, permission) DO UPDATE").
 		Set("is_granted = EXCLUDED.is_granted").
+		Set("assigned_by = EXCLUDED.assigned_by").
 		Set("expires_at = EXCLUDED.expires_at").
 		Exec(ctx)
 	return err

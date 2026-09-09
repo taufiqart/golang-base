@@ -19,6 +19,7 @@ type UserRole struct {
 	bun.BaseModel `bun:"table:user_roles,alias:ur"`
 	UserID        string    `bun:"user_id,pk" json:"user_id"`
 	Role          string    `bun:"role,pk" json:"role"`
+	AssignedBy    *string   `bun:"assigned_by,nullzero" json:"assigned_by,omitempty"`
 	CreatedAt     time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
@@ -37,6 +38,7 @@ type UserPermission struct {
 	UserID        string     `bun:"user_id,pk" json:"user_id"`
 	Permission    string     `bun:"permission,pk" json:"permission"`
 	IsGranted     bool       `bun:"is_granted,notnull" json:"is_granted"`
+	AssignedBy    *string    `bun:"assigned_by,nullzero" json:"assigned_by,omitempty"`
 	CreatedAt     time.Time  `bun:"created_at,nullzero,notnull,default:current_timestamp" json:"created_at"`
 	ExpiresAt     *time.Time `bun:"expires_at" json:"expires_at,omitempty"`
 }

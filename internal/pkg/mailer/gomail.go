@@ -21,7 +21,10 @@ type GoMailer struct {
 
 func NewGoMailer(cfg Config) *GoMailer {
 	d := gomail.NewDialer(cfg.Host, cfg.Port, cfg.Username, cfg.Password)
-	d.TLSConfig = &tls.Config{InsecureSkipVerify: true} // adjust for production
+	d.TLSConfig = &tls.Config{
+		InsecureSkipVerify: true, // adjust for production
+		ServerName:         cfg.Host,
+	}
 
 	return &GoMailer{
 		dialer: d,
@@ -52,4 +55,12 @@ func (m *GoMailer) Send(msg *Message) error {
 	}
 
 	return m.dialer.DialAndSend(gm)
+}
+
+func (m *GoMailer) Ping() error {
+	closer, err := m.dialer.Dial()
+	if err != nil {
+		return err
+	}
+	return closer.Close()
 }

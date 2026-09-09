@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -32,6 +33,13 @@ func LoadConfig() *Config {
 	var cfg Config
 	if err := envconfig.Process("", &cfg); err != nil {
 		log.Fatalf("Failed to parse configuration: %v", err)
+	}
+
+	if cfg.SMTPUsername == "" {
+		cfg.SMTPUsername = os.Getenv("SMTP_USER")
+	}
+	if cfg.SMTPPassword == "" {
+		cfg.SMTPPassword = os.Getenv("SMTP_PASS")
 	}
 
 	return &cfg
