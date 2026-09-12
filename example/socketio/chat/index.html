@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socket.IO /chat Demo</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .chat-container { width: 100%; max-width: 550px; height: 90vh; background: #1e293b; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); overflow: hidden; border: 1px solid #334155; }
+    .header { padding: 16px 20px; background: #0f172a; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    .header h1 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .status { font-size: 0.8rem; padding: 4px 10px; border-radius: 9999px; background: #ef4444; color: white; display: flex; align-items: center; gap: 6px; }
+    .status.connected { background: #10b981; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: white; }
+    .user-config { display: flex; gap: 8px; padding: 12px 20px; background: #1e293b; border-bottom: 1px solid #334155; align-items: center; }
+    .user-config label { font-size: 0.85rem; color: #94a3b8; }
+    .user-config input { flex: 1; padding: 6px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #f8fafc; font-size: 0.85rem; }
+    .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .message-item { display: flex; flex-direction: column; max-width: 80%; background: #334155; padding: 10px 14px; border-radius: 12px; font-size: 0.9rem; word-break: break-word; }
+    .message-item.me { align-self: flex-end; background: #3b82f6; }
+    .message-sender { font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px; font-weight: 600; }
+    .message-item.me .message-sender { color: #dbeafe; }
+    .message-time { font-size: 0.65rem; color: #94a3b8; align-self: flex-end; margin-top: 4px; }
+    .message-item.me .message-time { color: #bfdbfe; }
+    .input-form { display: flex; gap: 8px; padding: 16px 20px; background: #0f172a; border-top: 1px solid #334155; }
+    .input-form input { flex: 1; padding: 10px 16px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; outline: none; }
+    .input-form input:focus { border-color: #3b82f6; }
+    .input-form button { padding: 10px 20px; background: #3b82f6; border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .input-form button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="header">
+      <h1>💬 Realtime Chat <span style="font-size: 0.8rem; color: #94a3b8;">(/chat namespace)</span></h1>
+      <div id="status" class="status"><span class="status-dot"></span><span id="status-text">Disconnected</span></div>
+    </div>
+    <div class="user-config">
+      <label>Nama Anda:</label>
+      <input type="text" id="username" value="User_Demo">
+    </div>
+    <div class="messages" id="messages"></div>
+    <form class="input-form" id="chat-form">
+      <input type="text" id="message-input" placeholder="Ketik pesan lalu tekan Enter..." autocomplete="off" required>
+      <button type="submit">Kirim</button>
+    </form>
+  </div>
+
+  <script>
+    const statusBadge = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const messagesEl = document.getElementById('messages');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('message-input');
+    const usernameInput = document.getElementById('username');
+
+    // Generate random username if default
+    usernameInput.value = "User_" + Math.floor(1000 + Math.random() * 9000);
+
+    // Konek ke namespace "/chat" pada server Socket.IO
+    const socket = io("http://localhost:3150/chat", {
+      path: "/socket.io/",
+      transports: ["websocket", "polling"]
+    });
+
+    socket.on("connect", () => {
+      statusBadge.classList.add("connected");
+      statusText.textContent = "Connected (" + socket.id.slice(0, 5) + ")";
+      appendSystemMessage("Terhubung ke server Socket.IO namespace /chat");
+    });
+
+    socket.on("disconnect", () => {
+      statusBadge.classList.remove("connected");
+      statusText.textContent = "Disconnected";
+      appendSystemMessage("Koneksi terputus.");
+    });
+
+    socket.on("chat:receive", (data) => {
+      appendMessage(data.sender, data.text, data.time, data.sender === usernameInput.value);
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      const sender = usernameInput.value.trim() || "Anonim";
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Kirim pesan ke server via Socket.IO
+      socket.emit("chat:send", {
+        sender: sender,
+        text: text,
+        time: now
+      });
+
+      input.value = "";
+    });
+
+    function appendMessage(sender, text, time, isMe) {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "message-item" + (isMe ? " me" : "");
+
+      const senderDiv = document.createElement("div");
+      senderDiv.className = "message-sender";
+      senderDiv.textContent = sender;
+
+      const textDiv = document.createElement("div");
+      textDiv.textContent = text;
+
+      const timeDiv = document.createElement("div");
+      timeDiv.className = "message-time";
+      timeDiv.textContent = time;
+
+      msgDiv.appendChild(senderDiv);
+      msgDiv.appendChild(textDiv);
+      msgDiv.appendChild(timeDiv);
+
+      messagesEl.appendChild(msgDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function appendSystemMessage(text) {
+      const sysDiv = document.createElement("div");
+      sysDiv.style.textAlign = "center";
+      sysDiv.style.fontSize = "0.75rem";
+      sysDiv.style.color = "#64748b";
+      sysDiv.style.margin = "4px 0";
+      sysDiv.textContent = text;
+      messagesEl.appendChild(sysDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  </script>
+</body>
+</html>
