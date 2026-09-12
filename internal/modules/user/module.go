@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // Module represents the user module

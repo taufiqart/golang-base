@@ -12,7 +12,7 @@ import (
 	"golang-base/internal/pkg/response"
 	vld "golang-base/internal/pkg/validator"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type handler struct {
@@ -68,9 +68,9 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 
 // Auth Handlers
 
-func (h *handler) Register(c *fiber.Ctx) error {
+func (h *handler) Register(c fiber.Ctx) error {
 	var req RegisterRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -95,9 +95,9 @@ func (h *handler) Register(c *fiber.Ctx) error {
 	return response.Created(c, ToUserResponse(user))
 }
 
-func (h *handler) Login(c *fiber.Ctx) error {
+func (h *handler) Login(c fiber.Ctx) error {
 	var req LoginRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -123,9 +123,9 @@ func (h *handler) Login(c *fiber.Ctx) error {
 	return response.OK(c, NewAuthResponse(accessToken, refreshToken, &userResp))
 }
 
-func (h *handler) RefreshToken(c *fiber.Ctx) error {
+func (h *handler) RefreshToken(c fiber.Ctx) error {
 	var req RefreshTokenRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -145,7 +145,7 @@ func (h *handler) RefreshToken(c *fiber.Ctx) error {
 	})
 }
 
-func (h *handler) Me(c *fiber.Ctx) error {
+func (h *handler) Me(c fiber.Ctx) error {
 	userID := c.Locals("userID").(string)
 
 	user, err := h.svc.GetUser(c.Context(), userID)
@@ -163,9 +163,9 @@ func (h *handler) Me(c *fiber.Ctx) error {
 
 // User Handlers
 
-func (h *handler) ListUsers(c *fiber.Ctx) error {
+func (h *handler) ListUsers(c fiber.Ctx) error {
 	var filter UserFilter
-	if err := c.QueryParser(&filter); err != nil {
+	if err := c.Bind().Query(&filter); err != nil {
 		return response.BadRequest(c, "invalid query parameters")
 	}
 
@@ -191,7 +191,7 @@ func (h *handler) ListUsers(c *fiber.Ctx) error {
 	return response.PaginatedResponse(c, result, page, limit, total)
 }
 
-func (h *handler) GetUser(c *fiber.Ctx) error {
+func (h *handler) GetUser(c fiber.Ctx) error {
 	id := c.Params("id")
 
 	user, err := h.svc.GetUser(c.Context(), id)
@@ -208,12 +208,12 @@ func (h *handler) GetUser(c *fiber.Ctx) error {
 	return response.OK(c, ToUserResponseWithPermissions(user, permissions))
 }
 
-func (h *handler) UpdateUser(c *fiber.Ctx) error {
+func (h *handler) UpdateUser(c fiber.Ctx) error {
 	id := c.Params("id")
 	actorID := c.Locals("userID").(string)
 
 	var req UpdateUserRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -247,7 +247,7 @@ func (h *handler) UpdateUser(c *fiber.Ctx) error {
 	return response.OK(c, ToUserResponseWithPermissions(user, permissions))
 }
 
-func (h *handler) DeleteUser(c *fiber.Ctx) error {
+func (h *handler) DeleteUser(c fiber.Ctx) error {
 	id := c.Params("id")
 
 	// Check if user exists
@@ -264,14 +264,14 @@ func (h *handler) DeleteUser(c *fiber.Ctx) error {
 }
 
 // CreateUser creates a new user (requires user.create permission)
-func (h *handler) CreateUser(c *fiber.Ctx) error {
+func (h *handler) CreateUser(c fiber.Ctx) error {
 	actorID := c.Locals("userID").(string)
 	if !h.svc.HasPermission(c.Context(), actorID, "user.create") {
 		return response.Forbidden(c, "missing permission: user.create")
 	}
 
 	var req CreateUserRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -311,9 +311,9 @@ func (h *handler) CreateUser(c *fiber.Ctx) error {
 
 // Role Handlers
 
-func (h *handler) CreateRole(c *fiber.Ctx) error {
+func (h *handler) CreateRole(c fiber.Ctx) error {
 	var req RoleRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -330,7 +330,7 @@ func (h *handler) CreateRole(c *fiber.Ctx) error {
 	return response.Created(c, ToRoleResponse(role))
 }
 
-func (h *handler) GetRolePermissions(c *fiber.Ctx) error {
+func (h *handler) GetRolePermissions(c fiber.Ctx) error {
 	role := c.Params("role")
 
 	// Validate role exists
@@ -348,11 +348,11 @@ func (h *handler) GetRolePermissions(c *fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"permissions": perms})
 }
 
-func (h *handler) UpdateRolePermissions(c *fiber.Ctx) error {
+func (h *handler) UpdateRolePermissions(c fiber.Ctx) error {
 	role := c.Params("role")
 
 	var req UpdatePermissionsRequest
-	if err := c.BodyParser(&req); err != nil {
+	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
 
@@ -367,7 +367,7 @@ func (h *handler) UpdateRolePermissions(c *fiber.Ctx) error {
 // Permission Handlers
 
 // GetPermissionMatrix returns hardcoded roles & permissions with DB-based role permission assignments
-func (h *handler) GetPermissionMatrix(c *fiber.Ctx) error {
+func (h *handler) GetPermissionMatrix(c fiber.Ctx) error {
 	matrix, err := h.svc.GetPermissionMatrix(c.Context())
 	if err != nil {
 		return response.InternalError(c, "failed to get permission matrix")
@@ -377,7 +377,7 @@ func (h *handler) GetPermissionMatrix(c *fiber.Ctx) error {
 }
 
 // ListPermissions returns all available permission definitions and roles (static from code)
-func (h *handler) ListPermissions(c *fiber.Ctx) error {
+func (h *handler) ListPermissions(c fiber.Ctx) error {
 	result, err := h.svc.ListPermissions(c.Context())
 	if err != nil {
 		log.Printf("error: %v", err)
@@ -388,7 +388,7 @@ func (h *handler) ListPermissions(c *fiber.Ctx) error {
 }
 
 // GetAllRoles returns all roles with their permissions from DB
-func (h *handler) GetAllRoles(c *fiber.Ctx) error {
+func (h *handler) GetAllRoles(c fiber.Ctx) error {
 	roleNames, _ := h.svc.GetAllRoleNames(c.Context())
 
 	dbPerms, err := h.svc.GetAllRolesWithPermissions(c.Context())
@@ -411,7 +411,7 @@ func (h *handler) GetAllRoles(c *fiber.Ctx) error {
 	return response.OK(c, result)
 }
 
-func (h *handler) GetUserPermissions(c *fiber.Ctx) error {
+func (h *handler) GetUserPermissions(c fiber.Ctx) error {
 	userID := c.Params("user_id")
 
 	perms, err := h.svc.GetUserPermissions(c.Context(), userID)
@@ -441,7 +441,7 @@ func parseExpiresAt(s *string) (*time.Time, error) {
 	return nil, fmt.Errorf("invalid expires_at format: %s", *s)
 }
 
-func (h *handler) GrantUserPermission(c *fiber.Ctx) error {
+func (h *handler) GrantUserPermission(c fiber.Ctx) error {
 	userID := c.Params("user_id")
 	permission := c.Params("permission")
 	if permission == "" {
@@ -451,7 +451,7 @@ func (h *handler) GrantUserPermission(c *fiber.Ctx) error {
 	actorID := c.Locals("userID").(string)
 
 	var req UserPermissionRequest
-	_ = c.BodyParser(&req)
+	_ = c.Bind().Body(&req)
 
 	isGranted := true
 	if req.Granted != nil {
@@ -497,7 +497,7 @@ func (h *handler) GrantUserPermission(c *fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"message": msg})
 }
 
-func (h *handler) RevokeUserPermission(c *fiber.Ctx) error {
+func (h *handler) RevokeUserPermission(c fiber.Ctx) error {
 	userID := c.Params("user_id")
 	permission := c.Params("permission")
 	if permission == "" {
@@ -524,9 +524,9 @@ func (h *handler) RevokeUserPermission(c *fiber.Ctx) error {
 
 // Audit Log Handlers
 
-func (h *handler) QueryPermissionChanges(c *fiber.Ctx) error {
+func (h *handler) QueryPermissionChanges(c fiber.Ctx) error {
 	var query AuditLogQuery
-	if err := c.QueryParser(&query); err != nil {
+	if err := c.Bind().Query(&query); err != nil {
 		return response.BadRequest(c, "invalid query parameters")
 	}
 

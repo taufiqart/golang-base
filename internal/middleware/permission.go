@@ -10,7 +10,7 @@ import (
 	"golang-base/internal/domain"
 	"golang-base/internal/pkg/response"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -140,10 +140,10 @@ func matchPermission(userPerm string, allowedPatterns []string) bool {
 //	middleware.AllowedPermissions("master.*", "pricing.view")
 func AllowedPermissions(permissions ...string) fiber.Handler {
 	if cachedRepo == nil {
-		return func(c *fiber.Ctx) error { return c.Next() }
+		return func(c fiber.Ctx) error { return c.Next() }
 	}
 
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		userID, ok := c.Locals("userID").(string)
 		if !ok || userID == "" {
 			return response.Unauthorized(c, "unauthorized")

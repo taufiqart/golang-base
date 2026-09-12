@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +48,7 @@ func Do(t *testing.T, app *fiber.App, req Request) *Response {
 		httpReq.Header.Set("Authorization", "Bearer "+req.Token)
 	}
 
-	resp, err := app.Test(httpReq, 10000) // 10s timeout for migrations
+	resp, err := app.Test(httpReq, fiber.TestConfig{Timeout: 10000}) // 10s timeout for migrations
 	require.NoError(t, err, "app.Test")
 
 	var result map[string]interface{}

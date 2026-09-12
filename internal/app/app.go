@@ -1,8 +1,6 @@
 package app
 
 import (
-	"log/slog"
-
 	"golang-base/config"
 	"golang-base/internal/database"
 	"golang-base/internal/middleware"
@@ -13,7 +11,7 @@ import (
 	"golang-base/internal/pkg/logger"
 	pkgstorage "golang-base/internal/pkg/storage"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // New creates and configures the Fiber application with all routes.
@@ -54,7 +52,7 @@ func New(cfg *config.Config) *fiber.App {
 	storageProvider, _ := pkgstorage.NewProviderFromAppConfig(cfg)
 
 	// Health check endpoint
-	app.Get("/health", func(c *fiber.Ctx) error {
+	app.Get("/health", func(c fiber.Ctx) error {
 		status := fiber.Map{
 			"status":  "healthy",
 			"service": serviceName,
@@ -104,7 +102,7 @@ func New(cfg *config.Config) *fiber.App {
 }
 
 // customErrorHandler provides consistent error responses per OpenAPI spec
-func customErrorHandler(c *fiber.Ctx, err error) error {
+func customErrorHandler(c fiber.Ctx, err error) error {
 	code := fiber.StatusInternalServerError
 	message := "Internal server error"
 
@@ -124,24 +122,20 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 		case fiber.StatusForbidden:
 			message = "Forbidden"
 		case fiber.StatusNotFound:
-			message = "Not found"
-		case fiber.StatusMethodNotAllowed:
-			message = "Method not allowed"
-		case fiber.StatusRequestTimeout:
-			message = "Request timeout"
+			message = "Resource not found"
 		case fiber.StatusConflict:
-			message = "Conflict"
+			message = "Resource conflict"
+		case fiber.StatusUnprocessableEntity:
+			message = "Unprocessable entity"
 		case fiber.StatusRequestEntityTooLarge:
 			message = "Request entity too large"
+		case fiber.StatusTooManyRequests:
+			message = "Too many requests"
 		}
 	}
 
-	// Log the original error if it's a 5xx error
-	if code >= fiber.StatusInternalServerError {
-		slog.Error("Internal server error", "method", c.Method(), "path", c.Path(), "error", err.Error())
-	}
-
 	return c.Status(code).JSON(fiber.Map{
+		"code":    code,
 		"message": message,
 	})
 }

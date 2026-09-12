@@ -8,7 +8,7 @@ import (
 
 	"golang-base/internal/domain"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -148,12 +148,12 @@ func TestAllowedPermissions_SuperAdminBypass(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-1") // super_admin
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("master.edit"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -169,12 +169,12 @@ func TestAllowedPermissions_HasRolePermission(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-4") // guest with master.view via role
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("master.view"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -190,12 +190,12 @@ func TestAllowedPermissions_HasUserOverride(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-4") // guest with master.edit via user override
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("master.edit"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -211,12 +211,12 @@ func TestAllowedPermissions_Wildcard(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-4") // guest with master.view (role) + master.edit (override)
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("master.*"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -232,12 +232,12 @@ func TestAllowedPermissions_NoPermission(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-2") // regular user without master.view
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("master.view"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -253,12 +253,12 @@ func TestAllowedPermissions_MultiplePatterns(t *testing.T) {
 	defer func() { cachedRepo = nil }()
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", "user-2") // has user.view
 		return c.Next()
 	})
 	app.Use(AllowedPermissions("client.view", "user.view"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -276,7 +276,7 @@ func TestAllowedPermissions_Unauthenticated(t *testing.T) {
 	app := fiber.New()
 	// No userID set in c.Locals
 	app.Use(AllowedPermissions("master.view"))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 

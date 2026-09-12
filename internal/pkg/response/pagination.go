@@ -4,7 +4,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // PaginationMeta represents pagination metadata per OpenAPI spec
@@ -38,7 +38,7 @@ func NewPaginationMeta(page, limit, total int) PaginationMeta {
 }
 
 // ParsePaginationParams extracts page and limit from Fiber context with defaults
-func ParsePaginationParams(c *fiber.Ctx) (page, limit, offset int) {
+func ParsePaginationParams(c fiber.Ctx) (page, limit, offset int) {
 	pageStr := c.Query("page", "1")
 	limitStr := c.Query("limit", "10")
 
@@ -60,7 +60,7 @@ func ParsePaginationParams(c *fiber.Ctx) (page, limit, offset int) {
 }
 
 // PaginatedResponse sends a paginated response with meta
-func PaginatedResponse(c *fiber.Ctx, data interface{}, page, limit, total int) error {
+func PaginatedResponse(c fiber.Ctx, data interface{}, page, limit, total int) error {
 	meta := NewPaginationMeta(page, limit, total)
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"data": data,

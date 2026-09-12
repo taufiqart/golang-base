@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -57,7 +57,7 @@ func TestResponseHelpers(t *testing.T) {
 
 func TestOKResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return OK(c, "test data")
 	})
 
@@ -70,7 +70,7 @@ func TestOKResponse(t *testing.T) {
 
 func TestOKResponseWithMeta(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return OKWithMeta(c, []string{"item1", "item2"}, map[string]int{"page": 1, "limit": 10})
 	})
 
@@ -83,7 +83,7 @@ func TestOKResponseWithMeta(t *testing.T) {
 
 func TestCreatedResponse(t *testing.T) {
 	app := fiber.New()
-	app.Post("/test", func(c *fiber.Ctx) error {
+	app.Post("/test", func(c fiber.Ctx) error {
 		return Created(c, map[string]string{"id": "123"})
 	})
 
@@ -96,7 +96,7 @@ func TestCreatedResponse(t *testing.T) {
 
 func TestBadRequestResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return BadRequest(c, "bad input")
 	})
 
@@ -109,7 +109,7 @@ func TestBadRequestResponse(t *testing.T) {
 
 func TestBadRequestValidationResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return BadRequestValidation(c, []ErrorDetail{
 			{Field: "email", Message: "Invalid email format"},
 		})
@@ -124,7 +124,7 @@ func TestBadRequestValidationResponse(t *testing.T) {
 
 func TestNotFoundResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return NotFound(c, "resource not found")
 	})
 
@@ -137,7 +137,7 @@ func TestNotFoundResponse(t *testing.T) {
 
 func TestUnauthorizedResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return Unauthorized(c, "not authenticated")
 	})
 
@@ -150,7 +150,7 @@ func TestUnauthorizedResponse(t *testing.T) {
 
 func TestForbiddenResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return Forbidden(c, "access denied")
 	})
 
@@ -163,7 +163,7 @@ func TestForbiddenResponse(t *testing.T) {
 
 func TestConflictResponse(t *testing.T) {
 	app := fiber.New()
-	app.Post("/test", func(c *fiber.Ctx) error {
+	app.Post("/test", func(c fiber.Ctx) error {
 		return Conflict(c, "resource already exists")
 	})
 
@@ -176,7 +176,7 @@ func TestConflictResponse(t *testing.T) {
 
 func TestInternalErrorResponse(t *testing.T) {
 	app := fiber.New()
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return InternalError(c, "server error")
 	})
 
@@ -189,7 +189,7 @@ func TestInternalErrorResponse(t *testing.T) {
 
 func TestNoContentResponse(t *testing.T) {
 	app := fiber.New()
-	app.Delete("/test", func(c *fiber.Ctx) error {
+	app.Delete("/test", func(c fiber.Ctx) error {
 		return NoContent(c)
 	})
 

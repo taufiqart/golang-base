@@ -7,7 +7,7 @@ import (
 	"golang-base/internal/middleware"
 	pkgstorage "golang-base/internal/pkg/storage"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type Module struct {

@@ -15,6 +15,7 @@ import (
 
 	"golang-base/internal/pkg/storage"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -148,7 +149,7 @@ func TestS3_E2E_APIRoutes(t *testing.T) {
 	httpReq.Header.Set("Content-Type", mpWriter.FormDataContentType())
 	httpReq.Header.Set("Authorization", "Bearer "+token)
 
-	rawResp, err := TestApp.Test(httpReq, 10000)
+	rawResp, err := TestApp.Test(httpReq, fiber.TestConfig{Timeout: 10000})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, rawResp.StatusCode)
 

@@ -3,7 +3,7 @@ package docs
 import (
 	"os"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type handler struct{}
@@ -18,12 +18,12 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 	docsGroup.Get("/openapi.yml", h.OpenAPISpec)
 }
 
-func (h *handler) SwaggerUI(c *fiber.Ctx) error {
+func (h *handler) SwaggerUI(c fiber.Ctx) error {
 	c.Set("Content-Type", "text/html; charset=utf-8")
 	return c.SendString(swaggerUIHTML)
 }
 
-func (h *handler) OpenAPISpec(c *fiber.Ctx) error {
+func (h *handler) OpenAPISpec(c fiber.Ctx) error {
 	data, err := os.ReadFile("docs/blueprint/openapi.yml")
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

@@ -5,7 +5,7 @@ import (
 	"golang-base/internal/middleware"
 	jwtpkg "golang-base/internal/pkg/jwt"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type Module struct{}

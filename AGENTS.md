@@ -4,7 +4,7 @@
 
 A clean, modular Golang base template (Starter Kit) for microservice development. Built with Clean Architecture principles and domain-driven design.
 
-**Stack**: Go 1.26.2 | Fiber v2 | Bun ORM | PostgreSQL | Redis
+**Stack**: Go 1.26.2 | Fiber v3 | Bun ORM | PostgreSQL | Redis
 
 ---
 
@@ -14,9 +14,22 @@ A clean, modular Golang base template (Starter Kit) for microservice development
 golang-base/
 ├── cmd/                          # Application entry points
 │   ├── api/main.go              # HTTP API server (DI & boot)
-│   └── migrate/main.go          # Database migrations CLI
+│   ├── migrate/main.go          # Database migrations CLI
+│   └── seed/                    # Database seeders CLI
 ├── config/
 │   └── config.go                # Environment variables loader
+├── example/                      # Optional feature examples (opt-in, not wired into app)
+│   └── socketio/
+│       ├── chat/                # Standalone chat demo (namespace + event)
+│       │   ├── main.go
+│       │   └── index.html
+│       └── handler/             # Reusable module (service + handler + channel worker)
+│           ├── module.go
+│           ├── service.go
+│           ├── handler.go
+│           ├── request.go
+│           ├── types.go
+│           └── cmd/main.go      # Runnable server wiring the module
 ├── internal/
 │   ├── database/                # Database connection setup
 │   │   ├── postgres.go         # PostgreSQL (Bun ORM)
@@ -28,24 +41,30 @@ golang-base/
 │   │   ├── cache.go            # Cache key constants
 │   │   ├── interfaces.go       # Repository & service interfaces
 │   │   └── errors.go           # Domain error definitions
-│   ├── middleware/
-│   │   └── middleware.go        # Global middleware (CORS, Logger, Recover)
+│   ├── middleware/              # Global & route middleware (CORS, Logger, Recover, Auth, Permission)
 │   ├── modules/                 # Feature modules (Clean Architecture)
-│   │   └── user/
-│   │       ├── dto.go          # Request/Response DTOs
-│   │       ├── handler.go      # HTTP handlers (presentation)
-│   │       ├── service.go      # Business logic (application)
-│   │       ├── repository.go   # Data access (infrastructure)
-│   │       └── module.go       # Module init & route registration
+│   │   ├── auth/               # Authentication & RBAC
+│   │   ├── docs/               # Swagger/OpenAPI
+│   │   ├── storage/            # File storage
+│   │   └── user/               # User management
 │   └── pkg/                     # Shared utilities
-│       ├── cache/cache.go       # Generic Redis cache manager (Remember, Get, Set)
-│       ├── event/event.go       # Event Dispatcher (Pub-Sub)
-│       ├── jwt/jwt.go           # JWT token generation & validation
-│       ├── mailer/mailer.go     # SMTP mail delivery abstraction
-│       ├── mapper/mapper.go     # Object mapper (DTO transformer)
-│       ├── queue/queue.go       # Background task queue (Asynq/Redis)
-│       ├── storage/local.go     # Cloud/Local file storage abstraction
-│       └── response/response.go # Standardized API response helpers
+│       ├── cache/              # Generic Redis cache manager (Remember, Get, Set)
+│       ├── crypto/             # Password hashing helpers
+│       ├── db/                 # Database helpers
+│       ├── event/              # Event Dispatcher (Pub-Sub)
+│       ├── jwt/                # JWT token generation & validation
+│       ├── logger/             # Structured logging setup
+│       ├── mailer/             # SMTP mail delivery abstraction
+│       ├── mapper/             # Object mapper (DTO transformer)
+│       ├── ocr/                # OCR integration
+│       ├── queue/              # Background task queue (Asynq/Redis)
+│       ├── response/           # Standardized API response helpers
+│       ├── socketio/           # Socket.IO server, JWT handshake auth, config
+│       ├── storage/            # Cloud/Local file storage abstraction
+│       ├── utils/              # General helpers
+│       └── validator/          # Request validation helpers
+├── e2e/                         # E2E integration tests
+│   └── integration/
 ├── migrations/                  # SQL migrations (up/down)
 ├── docs/                        # Documentation & blueprints
 │   ├── structure.md
@@ -187,20 +206,31 @@ func ValidateTaskStatus(s string) bool { ... }
 
 ### 6. Context Propagation
 
-Always pass `ctx` through layers:
+Always pass `ctx` through layers. Handlers receive `fiber.Ctx` (value, not pointer, in Fiber v3):
 
 ```go
-func (h *Handler) GetProfile(c *fiber.Ctx) error {
+func (h *Handler) GetProfile(c fiber.Ctx) error {
     user, err := h.service.GetProfile(c.Context(), id)
 }
 ```
 
-### 7. Code Formatting and Styling (MANDATORY FOR AI AGENTS)
+### 7. Fiber v3 API Notes
+
+This project uses **Fiber v3** (`github.com/gofiber/fiber/v3`). Key differences from v2:
+
+- Handler signature uses `fiber.Ctx` (value type), not `*fiber.Ctx`.
+- Body/query parsing: use `c.Bind().Body(&req)` / `c.Bind().Query(&req)` — `c.BodyParser` and `c.QueryParser` no longer exist.
+- `c.QueryInt`/`c.QueryBool` helpers were removed; parse manually with `strconv.Atoi(c.Query("key", "default"))`.
+- CORS config fields (`AllowOrigins`, `AllowMethods`, `AllowHeaders`) are `[]string`, not comma-separated strings.
+- In tests, pass a timeout via `app.Test(req, fiber.TestConfig{Timeout: 10000})`.
+- Import path for middleware is `github.com/gofiber/fiber/v3/middleware/...`.
+
+### 8. Code Formatting and Styling (MANDATORY FOR AI AGENTS)
 
 - **ALWAYS run `make fmt`** (or `go fmt ./...`) after writing or modifying any Go code before finishing a task.
 - All Go source files must strictly adhere to standard Go formatting rules. Never leave unformatted code, unused imports, or improper indentation.
 
-### 8. Permission & RBAC Centralization (MANDATORY FOR AI AGENTS)
+### 9. Permission & RBAC Centralization (MANDATORY FOR AI AGENTS)
 
 All permissions in the application MUST be registered centrally in `internal/domain/permissions.go` inside the `init()` function:
 - **Centralized Registry**: NEVER register permissions in individual module files (e.g. `internal/modules/*/module.go`). All permissions MUST live in `internal/domain/permissions.go` to maintain a single source of truth and make RBAC control easily manageable.
@@ -252,6 +282,46 @@ make migrate-create name=<migration_name>
 
 ---
 
+## Examples (Opt-in Features)
+
+The `example/` directory holds optional features that are **not** wired into the main API application (`internal/app/app.go`). Each feature occupies its own subfolder and is safe to ignore or delete.
+
+### Layout Convention
+
+```
+example/
+└── <feature>/
+    ├── <pattern>/           # one folder per usage pattern
+    │   ├── module.go        # reusable module (optional)
+    │   ├── service.go
+    │   ├── handler.go
+    │   └── cmd/main.go      # runnable server demonstrating the pattern
+    └── <other-pattern>/
+```
+
+Rules:
+
+- **One folder per feature, one subfolder per usage pattern.** e.g. `example/socketio/chat` (event-only) and `example/socketio/handler` (module + REST + channel worker) are separate examples of the same feature.
+- **Never import `example/...` from `internal/`, `cmd/`, or `e2e/`.** Examples depend on core code, never the reverse.
+- **Reusable pieces live in `internal/pkg/<feature>`** (e.g. `internal/pkg/socketio`). An example only wires them together.
+- **Runnable examples read `PORT` from the environment** so integration tests can bind a dynamic port.
+- **Every example requires Unit Tests** for its non-`main` logic. Follow the module test conventions.
+
+### Socket.IO Example
+
+- `internal/pkg/socketio` — server wrapper, JWT handshake auth, config (Socket.IO protocol v4, compatible with `socket.io-client@4.x`).
+- `example/socketio/chat` — standalone browser chat UI; demonstrates namespaces and events on a single Fiber port.
+- `example/socketio/handler` — reusable module showing REST broadcast endpoint + Go channel worker + namespace-aware dispatch.
+
+Build and run:
+
+```bash
+go build -o bin/example_chat ./example/socketio/chat
+go build -o bin/example_handler ./example/socketio/handler/cmd
+```
+
+---
+
 ## Database & Cache
 
 - **PostgreSQL**: Primary database via Bun ORM (`internal/database/postgres.go`)
@@ -294,7 +364,7 @@ Environment variables (loaded via `godotenv` from `.env`):
 | ----------------------------------- | ----------------------------------------------------- |
 | `make run`                          | Build & start API server                              |
 | `make run-dev`                      | Start with hot-reload (air)                           |
-| `make build`                        | Build all binaries (API + migrate)                    |
+| `make build`                        | Build all binaries (API + migrate + seed)             |
 | `make migrate-up`                   | Run pending migrations                                |
 | `make migrate-down`                 | Rollback last migration                               |
 | `make migrate-create name=xxx`      | Create new migration                                  |
@@ -412,7 +482,9 @@ All integration tests run against a **real PostgreSQL** database via `E2E_DATABA
 - **Return typed errors** from service layer (map DB errors to domain errors)
 - **Use `response` pkg** for consistent API responses
 - **Module self-registration** via `module.go` — keep `main.go` clean
-- **Build outputs go to `./bin/`** — all binaries (API, migrate, seed) must be built into `bin/` directory, never to project root or elsewhere
+- **Build outputs go to `./bin/`** — all binaries (API, migrate, seed, and examples) must be built into `bin/` directory, never to project root or elsewhere
+- **Examples stay in `example/`** — opt-in features live under `example/<feature>/<pattern>/`; core code must never import them
+- **Fiber v3** — this project uses Fiber v3; handlers take `fiber.Ctx` (value), and use `c.Bind().Body()/Query()` for parsing
 
 ---
 

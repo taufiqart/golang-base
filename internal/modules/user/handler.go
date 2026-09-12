@@ -6,7 +6,7 @@ import (
 	"golang-base/internal/domain"
 	"golang-base/internal/pkg/response"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type handler struct {
@@ -28,7 +28,7 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 }
 
 // ListUsers handles GET /users
-func (h *handler) ListUsers(c *fiber.Ctx) error {
+func (h *handler) ListUsers(c fiber.Ctx) error {
 	page, limit, offset := response.ParsePaginationParams(c)
 
 	users, total, err := h.service.List(c.Context(), limit, offset)
@@ -46,7 +46,7 @@ func (h *handler) ListUsers(c *fiber.Ctx) error {
 }
 
 // GetProfile handles GET /users/:id
-func (h *handler) GetProfile(c *fiber.Ctx) error {
+func (h *handler) GetProfile(c fiber.Ctx) error {
 	id := c.Params("id")
 
 	if id == "" {

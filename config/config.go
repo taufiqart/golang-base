@@ -18,6 +18,7 @@ type Config struct {
 	TokenEncryptKey string `envconfig:"TOKEN_ENCRYPT_KEY"`
 	RateLimitMax    int    `envconfig:"RATE_LIMIT_MAX" default:"100"`
 	RateLimitExpMin int    `envconfig:"RATE_LIMIT_EXP_MINUTES" default:"1"`
+	JWTSecret       string `envconfig:"JWT_SECRET" default:"default-secret-key-change-in-production"`
 
 	// SMTP Mailer
 	SMTPHost     string `envconfig:"SMTP_HOST"`
@@ -79,6 +80,13 @@ func LoadConfig() *Config {
 	if cfg.AppService == "golang-base" {
 		if appName := os.Getenv("APP_NAME"); appName != "" {
 			cfg.AppService = appName
+		}
+	}
+
+	// JWT Secret Fallback
+	if cfg.JWTSecret == "" || cfg.JWTSecret == "default-secret-key-change-in-production" {
+		if secret := os.Getenv("JWT_SECRET"); secret != "" {
+			cfg.JWTSecret = secret
 		}
 	}
 

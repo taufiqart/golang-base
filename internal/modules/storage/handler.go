@@ -2,11 +2,12 @@ package storage
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"golang-base/internal/pkg/response"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type Handler struct {
@@ -26,7 +27,7 @@ func NewHandler(service Service, maxUploadSize int64) *Handler {
 
 // Upload handles multipart file upload
 // POST /api/v1/storage/upload
-func (h *Handler) Upload(c *fiber.Ctx) error {
+func (h *Handler) Upload(c fiber.Ctx) error {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		return response.BadRequest(c, "file field is required in form-data")
@@ -59,13 +60,13 @@ func (h *Handler) Upload(c *fiber.Ctx) error {
 
 // GetPresignedURL generates a temporary presigned URL for downloading/viewing an object
 // GET /api/v1/storage/presigned?key=...&expiry_minutes=...
-func (h *Handler) GetPresignedURL(c *fiber.Ctx) error {
+func (h *Handler) GetPresignedURL(c fiber.Ctx) error {
 	key := c.Query("key")
 	if key == "" {
 		return response.BadRequest(c, "query parameter 'key' is required")
 	}
 
-	expiryMinutes := c.QueryInt("expiry_minutes", 15)
+	expiryMinutes, _ := strconv.Atoi(c.Query("expiry_minutes", "15"))
 	if expiryMinutes <= 0 || expiryMinutes > 1440 {
 		expiryMinutes = 15
 	}
@@ -84,7 +85,7 @@ func (h *Handler) GetPresignedURL(c *fiber.Ctx) error {
 
 // Delete removes an object from storage
 // DELETE /api/v1/storage?key=...
-func (h *Handler) Delete(c *fiber.Ctx) error {
+func (h *Handler) Delete(c fiber.Ctx) error {
 	key := c.Query("key")
 	if key == "" {
 		return response.BadRequest(c, "query parameter 'key' is required")
@@ -102,7 +103,7 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 
 // Ping checks storage connectivity
 // GET /api/v1/storage/ping
-func (h *Handler) Ping(c *fiber.Ctx) error {
+func (h *Handler) Ping(c fiber.Ctx) error {
 	if err := h.service.Ping(c.Context()); err != nil {
 		return response.InternalError(c, fmt.Sprintf("storage ping failed: %v", err))
 	}

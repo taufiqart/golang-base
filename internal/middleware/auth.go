@@ -7,7 +7,7 @@ import (
 	jwtpkg "golang-base/internal/pkg/jwt"
 	"golang-base/internal/pkg/response"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 var (
@@ -24,7 +24,7 @@ func getJWT() *jwtpkg.JWT {
 
 // AuthMiddleware validates JWT token and sets userID in context
 func AuthMiddleware() fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
 			return response.Unauthorized(c, "missing authorization header")
