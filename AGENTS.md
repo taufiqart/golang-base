@@ -41,7 +41,7 @@ golang-base/
 │   │   ├── cache.go            # Cache key constants
 │   │   ├── interfaces.go       # Repository & service interfaces
 │   │   └── errors.go           # Domain error definitions
-│   ├── middleware/              # Global & route middleware (CORS, Logger, Recover, Auth, Permission)
+│   ├── middleware/              # Global & route middleware (CORS, Logger, Recover, Auth, Permission, Metrics, Tracing, RequestID)
 │   ├── modules/                 # Feature modules (Clean Architecture)
 │   │   ├── auth/               # Authentication & RBAC
 │   │   ├── docs/               # Swagger/OpenAPI
@@ -54,18 +54,22 @@ golang-base/
 │       ├── event/              # Event Dispatcher (Pub-Sub)
 │       ├── jwt/                # JWT token generation & validation
 │       ├── logger/             # Structured logging setup
+│       ├── logger/             # Structured logging setup
 │       ├── mailer/             # SMTP mail delivery abstraction
 │       ├── mapper/             # Object mapper (DTO transformer)
+│       ├── metrics/            # Prometheus registry, RED + pool collectors
 │       ├── ocr/                # OCR integration
 │       ├── queue/              # Background task queue (Asynq/Redis)
 │       ├── response/           # Standardized API response helpers
 │       ├── socketio/           # Socket.IO server, JWT handshake auth, config
 │       ├── storage/            # Cloud/Local file storage abstraction
+│       ├── tracing/            # OpenTelemetry OTLP setup
 │       ├── utils/              # General helpers
 │       └── validator/          # Request validation helpers
 ├── e2e/                         # E2E integration tests
 │   └── integration/
 ├── migrations/                  # SQL migrations (up/down)
+├── monitoring/                  # Opt-in Prometheus + Grafana + Jaeger stack
 ├── docs/                        # Documentation & blueprints
 │   ├── structure.md
 │   └── blueprint/              # Master data specs & OpenAPI
@@ -239,6 +243,36 @@ All permissions in the application MUST be registered centrally in `internal/dom
 - **Endpoint Protection**: Protect routes in module registration using `middleware.AllowedPermissions("<category>.<action>")`.
 - **Seeder Assignment**: When creating new permissions, always assign default permissions to roles in `cmd/seed/seeders/role_permissions.go`.
 
+### 10. Structured Logging & Request Correlation (MANDATORY FOR AI AGENTS)
+
+Logging goes through `internal/pkg/logger` (built on `log/slog`). Never add `fmt.Println` or the stdlib `log` package to application code.
+
+- **Setup**: `logger.Setup(cfg.LogLevel)` is called once in `cmd/api/main.go` before database init (and again defensively in `app.New`). Levels come from `LOG_LEVEL` (`debug`/`info`/`warn`/`error`, default `info`).
+- **Files**: every record is JSON written to stdout **and** `logs/app.log` (all levels) **and** one file per exact level — `logs/debug.log`, `logs/info.log`, `logs/warn.log`, `logs/error.log`.
+- **Pick the right level**: `slog.Debug` for diagnostics, `slog.Info` for lifecycle events, `slog.Warn` for degraded-but-recovered states, `slog.Error` for failed requests and unexpected errors.
+- **Handlers MUST use the request-scoped logger** so `request_id` is attached automatically:
+
+```go
+logger.FromContext(c.Context()).Error("failed to list users", "error", err)
+```
+
+- **Never log secrets** (passwords, tokens) and never interpolate values into the message — pass them as key/value attributes.
+- **Client IP behind a reverse proxy**: set `TRUSTED_PROXIES` to the CIDRs of the proxies that may legitimately set `X-Forwarded-For` (e.g. `127.0.0.1/32` for same-host nginx, `172.16.0.0/12` for Docker). While it is empty `c.IP()` is always the direct TCP peer and any inbound `X-Forwarded-For` is ignored, which is the safe default. Never add `0.0.0.0/0` or `Private: true` to the list — that lets anyone spoof their source IP in logs and audit trails.
+- **Request ID**: the `middleware.RequestID()` global middleware assigns each request a UUIDv7 correlation ID, echoes it in the `X-Request-ID` response header, and reuses a sane inbound `X-Request-ID`. `RequestLogger()` then emits one record per request at a level derived from the status code (2xx/3xx INFO, 4xx WARN, 5xx ERROR), so a request log line and its handler logs can be joined by `request_id`.
+
+### 11. Metrics, Tracing & Monitoring (MANDATORY FOR AI AGENTS)
+
+Prometheus metrics live in `internal/pkg/metrics` (`prometheus/client_golang`) and OpenTelemetry tracing in `internal/pkg/tracing` (OTLP/HTTP). Local collectors for both stacks live in `monitoring/` and are opt-in.
+
+- **Never use the default registry**: `metrics.New()` builds its own `prometheus.Registry`. A shared global lets a dependency publish series nobody reviewed and makes tests interfere with each other.
+- **Route labels MUST be templates**: label HTTP series from `c.Route().Path`, and only when `c.Matched()` is true — `Route()` falls back to a synthetic route whose `Path` is the **raw request URL**. Labelling raw URLs gives a scanner unlimited time series. Unmatched traffic must use `metrics.UnmatchedRoute`.
+- **`/metrics` is never anonymous**: it is mounted only when `METRICS_TOKEN` is set, and guarded by `middleware.MetricsAuth()` using a constant-time comparison. Never log the token.
+- **Tracing must stay off by default** (`TRACING_ENABLED=false`). When disabled the code still calls the OTel API, which resolves to the cheap no-op provider, so never add an "is tracing on" branch of your own.
+- **Do not record bound query values in spans.** The Bun hook runs without formatted queries; enabling them ships row data and credentials to the trace backend.
+- **Keep span names bounded**: spans start as `HTTP <METHOD>` and are renamed to `<METHOD> <route template>` only after a route matched.
+- **New metrics must be wired into the dashboard contract**: `monitoring/build_dashboard.py` generates the Grafana dashboard, and `go test ./internal/pkg/metrics/` fails when a dashboard query or alert rule references a family the service does not publish. Regenerate with `python3 monitoring/build_dashboard.py` after changing collectors.
+- **Middleware order is load-bearing**: `recover` → `Metrics` → `RequestID` → `Tracing` → `RequestLogger` → `cors` → `limiter`. Reordering silently breaks correlation (`Tracing` needs the request ID; `RequestLogger` needs both IDs) or drops error statuses from metrics.
+
 ---
 
 ## Adding New Modules & Seeders (MANDATORY FOR AI AGENTS)
@@ -354,6 +388,13 @@ Environment variables (loaded via `godotenv` from `.env`):
 | `REDIS_ADDR`       | Redis address                                          | `localhost:6379` |
 | `REDIS_PASSWORD`   | Redis password                                         | -                |
 | `JWT_SECRET`       | JWT signing secret                                     | fallback default |
+| `LOG_LEVEL`        | Minimum log level (`debug`/`info`/`warn`/`error`)      | `info`           |
+| `LOG_PRETTY`       | Human-readable log lines instead of JSON (local dev)   | `false`          |
+| `METRICS_TOKEN`    | Bearer token for `/metrics`; empty disables endpoint   | -                |
+| `TRACING_ENABLED`  | Install the OTel trace provider                        | `false`          |
+| `TRACING_SAMPLE_RATIO` | Head-sampling rate (0.0–1.0) for new traces          | `1`              |
+| `APP_VERSION`      | Reported as `app_info` metric and trace resource       | `dev`            |
+| `APP_ENV`          | `deployment.environment.name` on spans                 | `development`    |
 | `MAX_UPLOAD_SIZE`  | Maximum file upload body size in bytes                 | `10485760` (10MB)|
 
 ---

@@ -18,10 +18,11 @@ import (
 )
 
 type Request struct {
-	Method string
-	Path   string
-	Token  string
-	Body   any
+	Method  string
+	Path    string
+	Token   string
+	Body    any
+	Headers map[string]string
 }
 
 type Response struct {
@@ -46,6 +47,9 @@ func Do(t *testing.T, app *fiber.App, req Request) *Response {
 	httpReq.Header.Set("Content-Type", "application/json")
 	if req.Token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+req.Token)
+	}
+	for key, value := range req.Headers {
+		httpReq.Header.Set(key, value)
 	}
 
 	resp, err := app.Test(httpReq, fiber.TestConfig{Timeout: 10000}) // 10s timeout for migrations

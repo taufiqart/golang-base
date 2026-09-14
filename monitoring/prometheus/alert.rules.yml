@@ -1,0 +1,91 @@
+# Starter alerts derived from the published metrics. Thresholds are deliberately
+# blunt; tighten them per service once you know its normal shape.
+groups:
+  - name: golang-base.availability
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job="golang-base"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: golang-base is not being scraped
+          description: Prometheus could not reach the /metrics endpoint for 1 minute.
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_requests_total{status=~"5.."}[5m]))
+            /
+          clamp_min(sum(rate(http_server_requests_total[5m])), 0.001)
+            > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: More than 5% of requests are failing with 5xx
+          description: "Current 5xx ratio: {{ $value | humanizePercentage }}"
+
+      - alert: SlowRequests
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, route) (rate(http_server_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Route {{ $labels.route }} is slow"
+          description: "p95 latency is {{ $value | humanizeDuration }} for over 10 minutes."
+
+  - name: golang-base.saturation
+    interval: 30s
+    rules:
+      - alert: DatabasePoolSaturated
+        expr: |
+          sum by (instance) (go_sql_in_use_connections)
+            /
+          clamp_min(sum by (instance) (go_sql_max_open_connections), 1)
+            > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Database connection pool near its limit
+          description: "More than 90% of the pool is checked out; queries will start queueing."
+
+      - alert: DatabasePoolWaiting
+        expr: increase(go_sql_wait_count_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Requests are waiting for a database connection
+
+      - alert: RedisPoolTimeouts
+        expr: increase(redis_pool_timeouts_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis pool handed out no connection in time
+
+      - alert: HighGoroutineCount
+        expr: go_goroutines > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Goroutine count looks like a leak
+
+      - alert: MemoryNearLimit
+        expr: |
+          go_memstats_heap_alloc_bytes
+            / clamp_min(go_memstats_heap_sys_bytes, 1)
+            > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Go heap is close to the reserved heap size

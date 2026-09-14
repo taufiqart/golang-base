@@ -37,6 +37,9 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Setenv("RATE_LIMIT_MAX", "1000000")
+	// Mount the Prometheus scrape endpoint so the metrics tests exercise the real
+	// wiring instead of a locally built app.
+	os.Setenv("METRICS_TOKEN", MetricsToken)
 	cfg := config.LoadConfig()
 	if cfg.DatabaseURL == "" {
 		fmt.Println("E2E_DATABASE_URL not set. Skipping integration tests.")

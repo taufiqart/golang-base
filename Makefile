@@ -21,7 +21,7 @@ ifeq (migrate-create,$(firstword $(MAKECMDGOALS)))
   endif
 endif
 
-.PHONY: help build build-api build-migrate build-seed run run-dev tidy clean migrate-up migrate-down migrate-create migrate-list migrate-fresh test seed seed-list seed-all
+.PHONY: help build build-api build-migrate build-seed run run-dev tidy clean migrate-up migrate-down migrate-create migrate-list migrate-fresh test seed seed-list seed-all monitoring-up monitoring-down monitoring-check dashboard
 
 # Default target
 help: ## Show this help message
@@ -193,6 +193,29 @@ docker-up: ## Start PostgreSQL and Redis via Docker Compose
 docker-down: ## Stop Docker Compose services
 	@echo "Stopping local services..."
 	docker-compose -f docker-compose.dev.yml down
+
+## Start the observability stack (Prometheus, Grafana, Jaeger)
+monitoring-up: ## Start Prometheus, Grafana and Jaeger
+	@echo "Starting observability stack (Grafana :3000, Prometheus :9090, Jaeger :16686)..."
+	@docker compose -f monitoring/docker-compose.yml up -d
+
+## Stop the observability stack
+monitoring-down: ## Stop Prometheus, Grafana and Jaeger
+	@echo "Stopping observability stack..."
+	@docker compose -f monitoring/docker-compose.yml down
+
+## Validate the PromQL used by the dashboard and alert rules
+monitoring-check: ## Check Prometheus config and alert rules with promtool
+	@echo "Checking Prometheus configuration..."
+	@docker run --rm \
+		-v "$$(pwd)/monitoring/prometheus:/etc/prometheus-template:ro" \
+		--entrypoint /bin/sh prom/prometheus:v3.5.0 \
+		-c "sed \"s/__METRICS_TOKEN__/check-dummy/g\" /etc/prometheus-template/prometheus.yml > /tmp/p.yml && promtool check config /tmp/p.yml"
+
+## Regenerate the Grafana dashboard from build_dashboard.py
+dashboard: ## Regenerate monitoring/grafana/dashboards/golang-service.json
+	@echo "Regenerating Grafana dashboard..."
+	@python3 monitoring/build_dashboard.py
 
 ## Create a new seeder
 make-seeder: ## Scaffold a new seeder (usage: make make-seeder name=Product)

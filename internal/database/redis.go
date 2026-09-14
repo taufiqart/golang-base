@@ -2,7 +2,7 @@ package database
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/redis/go-redis/v9"
 
@@ -27,13 +27,23 @@ func InitRedis(cfg *config.Config) *redis.Client {
 
 	ctx := context.Background()
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Printf("Redis connection failed: %v (Redis will be disabled)", err)
+		slog.Warn("redis connection failed, redis will be disabled", "error", err)
 		return nil
 	}
 
-	log.Println("Redis connection successfully established")
+	slog.Info("redis connection established")
 	Redis = client
 	return client
+}
+
+// RedisPoolStats reports connection pool statistics, or nil when Redis is
+// disabled. It exists so callers such as the metrics registry can read the pool
+// without importing go-redis themselves.
+func RedisPoolStats() *redis.PoolStats {
+	if Redis == nil {
+		return nil
+	}
+	return Redis.PoolStats()
 }
 
 // CloseRedis closes the Redis connection

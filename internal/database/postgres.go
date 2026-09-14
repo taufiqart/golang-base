@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"golang-base/config"
@@ -11,15 +11,20 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
+	"github.com/uptrace/bun/extra/bunotel"
 )
 
 // DB holds the database connection instance
 var DB *bun.DB
 
+// SQL exposes the raw pool handle for connection-pool metrics, because bun.DB
+// only reports query counters.
+var SQL *sql.DB
+
 // InitPostgres initializes PostgreSQL connection using Bun ORM
 func InitPostgres(cfg *config.Config) error {
 	if cfg.DatabaseURL == "" {
-		log.Println("DATABASE_URL not configured, database will be disabled")
+		slog.Warn("DATABASE_URL not configured, database will be disabled")
 		return fmt.Errorf("DATABASE_URL not configured")
 	}
 
@@ -28,13 +33,18 @@ func InitPostgres(cfg *config.Config) error {
 	sqldb.SetConnMaxLifetime(5 * time.Minute)
 	db := bun.NewDB(sqldb, pgdialect.New())
 
+	// Formatted queries stay off: rendering bound values into a span would ship
+	// row data and credentials to the trace backend.
+	db.AddQueryHook(bunotel.NewQueryHook(bunotel.WithDBName(cfg.AppService)))
+
 	if err := db.Ping(); err != nil {
-		log.Printf("Database connection failed: %v (Database will be disabled)", err)
+		slog.Error("database connection failed, database will be disabled", "error", err)
 		return err
 	}
 
-	log.Println("PostgreSQL connection successfully established")
+	slog.Info("postgresql connection established")
 	DB = db
+	SQL = sqldb
 	return nil
 }
 

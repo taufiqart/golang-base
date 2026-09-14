@@ -1,0 +1,81 @@
+# Local observability stack: Prometheus (metrics) + Grafana (dashboards) +
+# Jaeger (traces). Kept separate from docker-compose.dev.yml on purpose: the API
+# may run either under compose or directly via `make run`, and this stack scrapes
+# both through host.docker.internal.
+#
+#   docker compose -f monitoring/docker-compose.yml up -d
+#
+# Grafana http://localhost:3000 (admin/admin), Jaeger http://localhost:16686.
+# The Prometheus scrape token comes from METRICS_TOKEN, which must match the
+# value the API process was started with.
+name: golang-base-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    # Prometheus v3 removed the expand-env feature, so the __METRICS_TOKEN__
+    # placeholder in prometheus.yml is expanded with sed before Prometheus
+    # starts. The token must match the one the API process runs with.
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:?set METRICS_TOKEN to the value the API runs with}
+      SCRAPE_TARGET: ${SCRAPE_TARGET:-host.docker.internal:3100}
+      SCRAPE_SCHEME: ${SCRAPE_SCHEME:-http}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sed -e "s/__METRICS_TOKEN__/$${METRICS_TOKEN}/g" \
+            -e "s/__SCRAPE_TARGET__/$${SCRAPE_TARGET}/g" \
+            -e "s/__SCRAPE_SCHEME__/$${SCRAPE_SCHEME}/g" \
+          /etc/prometheus-template/prometheus.yml > /tmp/prometheus.yml
+        exec /bin/prometheus "$$@"
+      - --
+    command:
+      - --config.file=/tmp/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus-template:ro
+      - promdata:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # All-in-one collector+UI. Point the API at it with:
+  #   TRACING_ENABLED=true
+  #   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+  #   OTEL_EXPORTER_OTLP_INSECURE=true
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # query UI
+      - "4318:4318"   # OTLP HTTP, what the API exports to
+    restart: unless-stopped
+
+volumes:
+  promdata:
+  grafanadata:

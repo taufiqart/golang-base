@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+      httpHeaderName1: Authorization
+    secureJsonData:
+      # Only needed for dashboards that query the app directly through the
+      # datasource; scrape auth lives in prometheus.yml.
+      httpHeaderValue1: "Bearer ${METRICS_TOKEN}"
