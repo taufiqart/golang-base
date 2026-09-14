@@ -2,13 +2,13 @@ package auth
 
 import (
 	"fmt"
-	"log"
 	"slices"
 	"strings"
 	"time"
 
 	"golang-base/internal/domain"
 	"golang-base/internal/middleware"
+	"golang-base/internal/pkg/logger"
 	"golang-base/internal/pkg/response"
 	vld "golang-base/internal/pkg/validator"
 
@@ -88,7 +88,7 @@ func (h *handler) Register(c fiber.Ctx) error {
 		if err == ErrUserExists {
 			return response.BadRequest(c, "user already exists")
 		}
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to register user", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -110,7 +110,7 @@ func (h *handler) Login(c fiber.Ctx) error {
 		if err == ErrInvalidCredentials {
 			return response.Unauthorized(c, "invalid email or password")
 		}
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to login", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -175,7 +175,7 @@ func (h *handler) ListUsers(c fiber.Ctx) error {
 
 	users, total, err := h.svc.ListUsers(c.Context(), &filter)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to list users", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -201,7 +201,7 @@ func (h *handler) GetUser(c fiber.Ctx) error {
 
 	permissions, err := h.svc.GetComputedPermissions(c.Context(), id, user.Roles)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to get computed permissions", "error", err, "user_id", id)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -235,7 +235,7 @@ func (h *handler) UpdateUser(c fiber.Ctx) error {
 		if err == ErrUserNotFound {
 			return response.NotFound(c, "user not found")
 		}
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to update user", "error", err, "user_id", id)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -256,7 +256,7 @@ func (h *handler) DeleteUser(c fiber.Ctx) error {
 	}
 
 	if err := h.svc.DeleteUser(c.Context(), id); err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to delete user", "error", err, "user_id", id)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -297,7 +297,7 @@ func (h *handler) CreateUser(c fiber.Ctx) error {
 		if err == ErrUserExists {
 			return response.BadRequest(c, "user already exists")
 		}
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to create user", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -323,7 +323,7 @@ func (h *handler) CreateRole(c fiber.Ctx) error {
 
 	role, err := h.svc.CreateRole(c.Context(), strings.TrimSpace(req.Role), req.Description)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to create role", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -341,7 +341,7 @@ func (h *handler) GetRolePermissions(c fiber.Ctx) error {
 
 	perms, err := h.svc.GetRolePermissions(c.Context(), role)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to get role permissions", "error", err, "role", role)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -357,7 +357,7 @@ func (h *handler) UpdateRolePermissions(c fiber.Ctx) error {
 	}
 
 	if err := h.svc.UpdateRolePermissions(c.Context(), role, req.Permissions); err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to update role permissions", "error", err, "role", role)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -380,7 +380,7 @@ func (h *handler) GetPermissionMatrix(c fiber.Ctx) error {
 func (h *handler) ListPermissions(c fiber.Ctx) error {
 	result, err := h.svc.ListPermissions(c.Context())
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to list permissions", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -416,7 +416,7 @@ func (h *handler) GetUserPermissions(c fiber.Ctx) error {
 
 	perms, err := h.svc.GetUserPermissions(c.Context(), userID)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to get user permissions", "error", err, "user_id", userID)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -486,7 +486,7 @@ func (h *handler) GrantUserPermission(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 
 	if err := h.svc.GrantUserPermission(c.Context(), "user_permission", nil, &userID, permission, isGranted, expiresAtPtr, actorID, reasonPtr, &ipAddress, &userAgent); err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to grant user permission", "error", err, "user_id", userID, "permission", permission)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -515,7 +515,7 @@ func (h *handler) RevokeUserPermission(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 
 	if err := h.svc.RevokeUserPermission(c.Context(), "user_permission", nil, &userID, permission, actorID, reasonPtr, &ipAddress, &userAgent); err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to revoke user permission", "error", err, "user_id", userID, "permission", permission)
 		return response.InternalError(c, "internal server error")
 	}
 
@@ -561,13 +561,13 @@ func (h *handler) QueryPermissionChanges(c fiber.Ctx) error {
 
 	logs, err := h.svc.QueryPermissionChanges(c.Context(), filter)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to query permission changes", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 
 	total, err := h.svc.CountPermissionChanges(c.Context(), filter)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to count permission changes", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 

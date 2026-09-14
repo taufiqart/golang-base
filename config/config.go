@@ -20,6 +20,20 @@ type Config struct {
 	RateLimitExpMin int    `envconfig:"RATE_LIMIT_EXP_MINUTES" default:"1"`
 	JWTSecret       string `envconfig:"JWT_SECRET" default:"default-secret-key-change-in-production"`
 
+	// Logging
+	LogLevel  string `envconfig:"LOG_LEVEL" default:"info"`
+	LogPretty bool   `envconfig:"LOG_PRETTY" default:"false"`
+
+	// Observability
+	AppVersion     string  `envconfig:"APP_VERSION" default:"dev"`
+	AppEnvironment string  `envconfig:"APP_ENV" default:"development"`
+	MetricsToken   string  `envconfig:"METRICS_TOKEN"`
+	TracingEnabled bool    `envconfig:"TRACING_ENABLED" default:"false"`
+	TracingSample  float64 `envconfig:"TRACING_SAMPLE_RATIO" default:"1"`
+
+	// Proxy trust
+	TrustedProxies []string `envconfig:"TRUSTED_PROXIES"`
+
 	// SMTP Mailer
 	SMTPHost     string `envconfig:"SMTP_HOST"`
 	SMTPPort     int    `envconfig:"SMTP_PORT" default:"587"`

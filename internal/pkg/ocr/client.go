@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -125,7 +125,7 @@ func (c *Client) callAPIRaw(ctx context.Context, reqData ExtractionRequest) (str
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		log.Printf("ocr api error: status=%d body=%s", resp.StatusCode, string(errBody))
+		slog.Error("ocr api error", "status", resp.StatusCode, "body", string(errBody))
 		return "", ErrFailed
 	}
 

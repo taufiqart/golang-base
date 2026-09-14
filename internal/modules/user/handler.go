@@ -1,9 +1,8 @@
 package user
 
 import (
-	"log"
-
 	"golang-base/internal/domain"
+	"golang-base/internal/pkg/logger"
 	"golang-base/internal/pkg/response"
 
 	"github.com/gofiber/fiber/v3"
@@ -33,7 +32,7 @@ func (h *handler) ListUsers(c fiber.Ctx) error {
 
 	users, total, err := h.service.List(c.Context(), limit, offset)
 	if err != nil {
-		log.Printf("error: %v", err)
+		logger.FromContext(c.Context()).Error("failed to list users", "error", err)
 		return response.InternalError(c, "internal server error")
 	}
 

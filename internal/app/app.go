@@ -14,128 +14,47 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// New creates and configures the Fiber application with all routes.
-// Database connections must be initialized before calling this function.
 func New(cfg *config.Config) *fiber.App {
-	// Setup structured JSON logger
-	logger.Setup()
-
-	if cfg == nil {
-		cfg = &config.Config{
-			AppService: "golang-base",
-		}
-	}
-
-	serviceName := "golang-base"
-	if cfg.AppService != "" {
-		serviceName = cfg.AppService
-	}
-
-	// Calculate HTTP body limit based on MAX_UPLOAD_SIZE
-	bodyLimit := 10 * 1024 * 1024 // 10MB default
-	if cfg.MaxUploadSize > 0 {
-		bodyLimit = int(cfg.MaxUploadSize)
-	}
-
-	// Setup Fiber app with custom error handler
+	if cfg == nil { cfg = &config.Config{AppService: "golang-base", AppVersion: "dev", LogLevel: "info"} }
+	logger.Setup(cfg.LogLevel, cfg.LogPretty)
+	serviceName := cfg.AppService
+	if serviceName == "" { serviceName = "golang-base" }
+	bodyLimit := 10 * 1024 * 1024
+	if cfg.MaxUploadSize > 0 { bodyLimit = int(cfg.MaxUploadSize) }
 	app := fiber.New(fiber.Config{
-		AppName:        serviceName,
-		ErrorHandler:   customErrorHandler,
-		ReadBufferSize: 32 * 1024,
-		BodyLimit:      bodyLimit,
+		AppName: serviceName, ErrorHandler: customErrorHandler,
+		ReadBufferSize: 32 * 1024, BodyLimit: bodyLimit,
 	})
-
-	// Setup global middleware
 	middleware.SetupMiddleware(app, cfg)
-
-	// Initialize storage provider for health check
 	storageProvider, _ := pkgstorage.NewProviderFromAppConfig(cfg)
-
-	// Health check endpoint
 	app.Get("/health", func(c fiber.Ctx) error {
-		status := fiber.Map{
-			"status":  "healthy",
-			"service": serviceName,
-		}
-
-		if database.DB != nil {
-			if err := database.DB.Ping(); err != nil {
-				status["database"] = "disconnected"
-			} else {
-				status["database"] = "connected"
-			}
-		} else {
-			status["database"] = "disabled"
-		}
-
-		if database.Redis != nil {
-			if err := database.Redis.Ping(c.Context()).Err(); err != nil {
-				status["redis"] = "disconnected"
-			} else {
-				status["redis"] = "connected"
-			}
-		} else {
-			status["redis"] = "disabled"
-		}
-
-		if storageProvider != nil {
-			if err := storageProvider.Ping(c.Context()); err != nil {
-				status["storage"] = "disconnected"
-			} else {
-				status["storage"] = "connected"
-			}
-		} else {
-			status["storage"] = "disabled"
-		}
-
+		status := fiber.Map{"status": "healthy", "service": serviceName}
+		if database.DB != nil { if err := database.DB.Ping(); err != nil { status["database"] = "disconnected" } else { status["database"] = "connected" } } else { status["database"] = "disabled" }
+		if database.Redis != nil { if err := database.Redis.Ping(c.Context()).Err(); err != nil { status["redis"] = "disconnected" } else { status["redis"] = "connected" } } else { status["redis"] = "disabled" }
+		if storageProvider != nil { if err := storageProvider.Ping(c.Context()); err != nil { status["storage"] = "disconnected" } else { status["storage"] = "connected" } } else { status["storage"] = "disabled" }
 		return c.JSON(status)
 	})
-
-	// Register modules
 	apiGroup := app.Group("/api/v1")
 	docs.New().Register(apiGroup)
 	auth.New().Register(apiGroup)
 	user.New().Register(apiGroup)
 	storage.New(cfg).Register(apiGroup)
-
 	return app
 }
 
-// customErrorHandler provides consistent error responses per OpenAPI spec
 func customErrorHandler(c fiber.Ctx, err error) error {
 	code := fiber.StatusInternalServerError
 	message := "Internal server error"
-
-	if e, ok := err.(*fiber.Error); ok {
-		code = e.Code
-		if e.Message != "" {
-			message = e.Message
-		}
+	if e, ok := err.(*fiber.Error); ok { code = e.Code; if e.Message != "" { message = e.Message } }
+	switch code {
+	case fiber.StatusBadRequest: message = "Bad request"
+	case fiber.StatusUnauthorized: message = "Unauthorized"
+	case fiber.StatusForbidden: message = "Forbidden"
+	case fiber.StatusNotFound: message = "Resource not found"
+	case fiber.StatusConflict: message = "Resource conflict"
+	case fiber.StatusUnprocessableEntity: message = "Unprocessable entity"
+	case fiber.StatusRequestEntityTooLarge: message = "Request entity too large"
+	case fiber.StatusTooManyRequests: message = "Too many requests"
 	}
-
-	if message == "Internal server error" {
-		switch code {
-		case fiber.StatusBadRequest:
-			message = "Bad request"
-		case fiber.StatusUnauthorized:
-			message = "Unauthorized"
-		case fiber.StatusForbidden:
-			message = "Forbidden"
-		case fiber.StatusNotFound:
-			message = "Resource not found"
-		case fiber.StatusConflict:
-			message = "Resource conflict"
-		case fiber.StatusUnprocessableEntity:
-			message = "Unprocessable entity"
-		case fiber.StatusRequestEntityTooLarge:
-			message = "Request entity too large"
-		case fiber.StatusTooManyRequests:
-			message = "Too many requests"
-		}
-	}
-
-	return c.Status(code).JSON(fiber.Map{
-		"code":    code,
-		"message": message,
-	})
+	return c.Status(code).JSON(fiber.Map{"code": code, "message": message})
 }

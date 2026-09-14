@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"log"
+	"log/slog"
 
 	"golang-base/config"
 	"golang-base/internal/middleware"
@@ -21,7 +21,7 @@ func New(cfg *config.Config) *Module {
 
 	provider, err := pkgstorage.NewProviderFromAppConfig(cfg)
 	if err != nil {
-		log.Printf("Warning: failed to initialize storage provider: %v, falling back to disabled provider", err)
+		slog.Warn("failed to initialize storage provider, falling back to disabled provider", "error", err)
 		provider = &pkgstorage.DisabledProvider{}
 	}
 
